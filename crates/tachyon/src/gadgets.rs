@@ -1,4 +1,4 @@
-//! Fixed-width arithmetic and curve gadgets for proof steps.
+//! Range, epoch, QR-profile and curve gadgets for proof steps.
 
 use alloc::vec::Vec;
 
@@ -7,9 +7,10 @@ use ragu_primitives::{Element, GadgetExt as _, Point};
 
 use crate::pasta::{EpAffine, Fp};
 
-pub(crate) mod arithmetic;
+pub(crate) mod epoch;
 pub(crate) mod fixed_base;
 pub(crate) mod qr;
+pub(crate) mod range;
 
 /// The affine coordinates of a point, read through its [`Write`] encoding.
 ///

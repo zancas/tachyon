@@ -45,7 +45,7 @@ pub use crate::collections::qr::classify;
 use crate::{
     collections::qr::QUADRATIC_NON_RESIDUE,
     digest::poseidon,
-    gadgets::{self, arithmetic as circuit},
+    gadgets,
     pasta::{EpAffine, Fp},
     primitives::{
         Anchor, EpochIndex, NfSeqPoly, QrClassRoot, QrDiscriminant, QrInterpolantPoly, QrProfile,
@@ -401,7 +401,7 @@ impl Step<Pasta> for QrStampIntakeSeed {
                     "QrStampIntakeSeed: the stamp's tachygram set is empty".into(),
                 )
             })?;
-        circuit::EpochIndex::new(dr, &epoch_element)?;
+        gadgets::epoch::EpochIndex::new(dr, &epoch_element)?;
         let anchor = poseidon::circuit::anchor_next_stamp(
             dr,
             &previous,
@@ -502,7 +502,7 @@ impl Step<Pasta> for QrEmptyIntakeSeed {
             Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.2)))?;
         let epoch_element =
             Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.1)))?;
-        circuit::EpochIndex::new(dr, &epoch_element)?;
+        gadgets::epoch::EpochIndex::new(dr, &epoch_element)?;
         let output = D::try_just(|| {
             let (anchor, epoch, discriminant) = witness.take();
             let () = left.take();
@@ -989,7 +989,7 @@ impl Step<Pasta> for QrSideDescend {
         }
         let depth_element = left_encoded.as_gadget().depth.clone();
         let profile_bits = left_encoded.as_gadget().bits.clone();
-        circuit::Bounded::<D, 5>::new(dr, &depth_element).map_err(|_err| {
+        gadgets::range::Bounded::<D, 5>::new(dr, &depth_element).map_err(|_err| {
             ragu_core::Error::InvalidWitness(
                 "QrSideDescend: profile has no bit left for another side".into(),
             )
@@ -1246,7 +1246,7 @@ impl Step<Pasta> for QrBucketSeal {
         let epoch_element = left_encoded.as_gadget().epoch.clone();
         let one = Element::constant(dr, Fp::ONE);
         let successor = epoch_element.add(dr, &one);
-        let next = circuit::EpochIndex::new(dr, &successor)
+        let next = gadgets::epoch::EpochIndex::new(dr, &successor)
             .map_err(|_err| {
                 ragu_core::Error::InvalidWitness(
                     "QrBucketSeal: crossing past the final epoch".into(),
@@ -1448,7 +1448,7 @@ impl Step<Pasta> for QrUnspentInit {
         )?;
         let one = Element::constant(dr, Fp::ONE);
         let successor = left_encoded.as_gadget().epoch.add(dr, &one);
-        let checked_next = circuit::EpochIndex::new(dr, &successor).map_err(|_err| {
+        let checked_next = gadgets::epoch::EpochIndex::new(dr, &successor).map_err(|_err| {
             ragu_core::Error::InvalidWitness("QrUnspentInit: bucket has no next epoch".into())
         })?;
         let next_value = checked_next.value()?;

@@ -28,8 +28,7 @@ use udon::field::Field as _;
 use super::{delegation::NoteNullifiers, pool::NoteUnspent, qr::QrBucket};
 use crate::{
     digest::poseidon,
-    gadgets::arithmetic as circuit,
-    note,
+    gadgets, note,
     pasta::Fp,
     primitives::{Anchor, EpochIndex, TachygramSetPoly},
 };
@@ -160,7 +159,7 @@ impl Step<Pasta> for SpendableInit {
                     "SpendableInit: the stamp's tachygram set is empty".into(),
                 )
             })?;
-        circuit::EpochIndex::new(dr, &epoch)?;
+        gadgets::epoch::EpochIndex::new(dr, &epoch)?;
         // The anchor immediately after the creation stamp, computed in-circuit
         // so the proof certifies the fold of `epoch` and `creation_commit`;
         // consensus membership of the eventual spend anchor binds the rest
@@ -274,7 +273,7 @@ impl Step<Pasta> for QrSpendableInit {
         })?;
         let one = Element::constant(dr, Fp::ONE);
         let successor = bucket_epoch.add(dr, &one);
-        let checked_next = circuit::EpochIndex::new(dr, &successor).map_err(|_err| {
+        let checked_next = gadgets::epoch::EpochIndex::new(dr, &successor).map_err(|_err| {
             ragu_core::Error::InvalidWitness("QrSpendableInit: bucket has no next epoch".into())
         })?;
         let next_value = checked_next.value()?;

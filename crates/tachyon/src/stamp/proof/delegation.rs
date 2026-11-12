@@ -28,7 +28,7 @@ use udon::{curve::Affine as _, field::Field as _};
 use crate::{
     constants::MAX_MONEY,
     digest::poseidon,
-    gadgets::{self, arithmetic as circuit},
+    gadgets,
     keys::{NoteMasterKey, PaymentKey, ProofAuthorizingKey},
     note::{self, Note},
     nullifier::{self, NF_DERIVATION_WIDTH},
@@ -217,7 +217,7 @@ impl Step<Pasta> for NoteSeed {
             &mut (),
             witness.as_ref().map(|data| Fp::from(u64::from(data.0))),
         )?;
-        circuit::Bounded::<D, 51>::at_most(dr, &value, MAX_MONEY)?;
+        gadgets::range::Bounded::<D, 51>::at_most(dr, &value, MAX_MONEY)?;
         let psi = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.1)))?;
         let rcm = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.2)))?;
         rcm.clone().enforce_nonzero(dr).map_err(|_err| {
@@ -354,7 +354,7 @@ impl Step<Pasta> for NullifierDerive {
         #[expect(clippy::expect_used, reason = "four is invertible in Fp")]
         let quarter = Fp::from(4).invert().expect("four is invertible");
         let group = epoch_start.scale(dr, Coeff::Arbitrary(quarter));
-        circuit::Bounded::<D, 30>::new(dr, &group).map_err(|_err| {
+        gadgets::range::Bounded::<D, 30>::new(dr, &group).map_err(|_err| {
             ragu_core::Error::InvalidWitness(
                 "NullifierDerive: epoch_start is not group-aligned".into(),
             )
@@ -370,7 +370,7 @@ impl Step<Pasta> for NullifierDerive {
             })?),
         );
         let epoch_end = epoch_start.add(dr, &width);
-        let end_value = circuit::EpochIndex::new(dr, &epoch_end)
+        let end_value = gadgets::epoch::EpochIndex::new(dr, &epoch_end)
             .map_err(|_err| {
                 ragu_core::Error::InvalidWitness(
                     "NullifierDerive: window exceeds the epoch range".into(),

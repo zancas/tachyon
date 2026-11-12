@@ -19,7 +19,7 @@ use crate::{
     Tachygram,
     constants::MAX_MONEY,
     digest::poseidon,
-    gadgets::{self, arithmetic as circuit, fixed_base},
+    gadgets::{self, fixed_base},
     note::Note,
     pasta::{EpAffine, Fp, Fq},
     value,
@@ -118,7 +118,7 @@ impl Step<Pasta> for OutputBind {
         )?;
         let bound = Element::constant(dr, Fp::from(MAX_MONEY));
         let slack = bound.sub(dr, &amount);
-        circuit::Bounded::<D, 51>::new(dr, &slack)?;
+        gadgets::range::Bounded::<D, 51>::new(dr, &slack)?;
         let rcm = Element::alloc(
             dr,
             &mut (),

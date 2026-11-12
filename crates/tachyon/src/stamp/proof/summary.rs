@@ -25,7 +25,7 @@ use ragu_primitives::{Element, allocator::Allocator, io::Write};
 
 use crate::{
     digest::poseidon,
-    gadgets::arithmetic as circuit,
+    gadgets,
     pasta::Fp,
     primitives::{Anchor, EpochIndex, TachygramSetPoly},
     relations::enforce::{enforce_poly_equal, enforce_poly_product},
@@ -147,7 +147,7 @@ impl Step<Pasta> for SummarySeed {
                     "SummarySeed: the stamp's tachygram set is empty".into(),
                 )
             })?;
-        circuit::EpochIndex::new(dr, &epoch_element)?;
+        gadgets::epoch::EpochIndex::new(dr, &epoch_element)?;
         let anchor = poseidon::circuit::anchor_next_stamp(
             dr,
             &previous,

@@ -24,7 +24,7 @@ use crate::{
     constants::{MAX_MONEY, orchard},
     digest::poseidon,
     entropy::ActionEntropy,
-    gadgets::{self, arithmetic as circuit, fixed_base},
+    gadgets::{self, fixed_base},
     keys::{ProofAuthorizingKey, private},
     note::{self, Note},
     pasta::{EpAffine, Fp, Fq},
@@ -858,10 +858,10 @@ impl Step<Pasta> for FeeFuse {
         // Their integer sum is below p, excluding field wraparound and proving
         // 0 <= fee <= maximum <= MAX_MONEY.
         let change = maximum.sub(dr, &fee);
-        circuit::Bounded::<D, 51>::new(dr, &fee).map_err(|_err| {
+        gadgets::range::Bounded::<D, 51>::new(dr, &fee).map_err(|_err| {
             ragu_core::Error::InvalidWitness("FeeFuse: fee is out of range".into())
         })?;
-        circuit::Bounded::<D, 51>::new(dr, &change).map_err(|_err| {
+        gadgets::range::Bounded::<D, 51>::new(dr, &change).map_err(|_err| {
             ragu_core::Error::InvalidWitness("FeeFuse: change is out of range".into())
         })?;
         let bound = Element::constant(dr, Fp::from(MAX_MONEY));
