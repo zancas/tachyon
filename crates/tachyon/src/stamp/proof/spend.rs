@@ -120,43 +120,14 @@ impl Header<Fp> for SpendHeader {
 ///
 /// [`NoteSeed`](super::delegation::NoteSeed) proves that the input master key,
 /// commitment and note belong together. The spendable proof supplies the epoch;
-/// the circuit checks that its successor remains in range. The nullifier pair,
+/// the circuit checks that it and its successor are in range, and selects each
+/// nullifier by the epoch's constrained low bits. The nullifier pair,
 /// payment key and value all come from these proved inputs. Only the value
 /// commitment's blinding scalar `rcv` is freely chosen.
 ///
 /// Two sponges run whether or not $e$ and $e + 1$ share a group.
 #[derive(Debug)]
 pub struct SpendBind;
-
-#[expect(
-    clippy::indexing_slicing,
-    clippy::missing_asserts_for_indexing,
-    reason = "the epoch decomposition has exactly 32 bits"
-)]
-fn derive_nullifier<'dr, D: Driver<'dr, F = Fp>>(
-    dr: &mut D,
-    master: &Element<'dr, D>,
-    epoch: &Element<'dr, D>,
-) -> ragu_core::Result<Element<'dr, D>> {
-    let bits = FixedVec::<_, ConstLen<32>>::try_from_fn(|index| {
-        Boolean::alloc(
-            dr,
-            &mut (),
-            epoch
-                .value()
-                .map(|candidate| candidate.to_le_bits().as_ref()[index]),
-        )
-    })?;
-    multipack(dr, &bits)?[0].enforce_equal(dr, epoch)?;
-    let low = &bits[0];
-    let high = &bits[1];
-    let twice_high = high.element().double(dr);
-    let group = epoch.sub(dr, &low.element()).sub(dr, &twice_high);
-    let [first, second, third, fourth] = poseidon::circuit::nullifier_group(dr, master, &group)?;
-    let lower = low.conditional_select(dr, &first, &second)?;
-    let upper = low.conditional_select(dr, &third, &fourth)?;
-    high.conditional_select(dr, &lower, &upper)
-}
 
 impl Step<Pasta> for SpendBind {
     type Aux<'source> = ();
@@ -213,14 +184,17 @@ impl Step<Pasta> for SpendBind {
             reason = "multipack packs 51 bits into one chunk"
         )]
         multipack(dr, &slack_bits)?[0].enforce_equal(dr, &slack)?;
-        let epoch = left_encoded.as_gadget().epoch_current.clone();
-        let one = Element::constant(dr, Fp::ONE);
-        let next = epoch.add(dr, &one);
-        circuit::EpochIndex::new(dr, &next).map_err(|_err| {
+        let current = circuit::EpochIndex::new(dr, &left_encoded.as_gadget().epoch_current)?;
+        let next = current.next(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("SpendBind: no epoch follows the spend epoch".into())
         })?;
-        let nf_current = derive_nullifier(dr, &right_encoded.as_gadget().mk, &epoch)?;
-        let nf_next = derive_nullifier(dr, &right_encoded.as_gadget().mk, &next)?;
+        let mk = &right_encoded.as_gadget().mk;
+        let current_start = current.group_start(dr);
+        let current_group = poseidon::circuit::nullifier_group(dr, mk, &current_start)?;
+        let nf_current = current.select_in_group(dr, current_group)?;
+        let next_start = next.group_start(dr);
+        let next_group = poseidon::circuit::nullifier_group(dr, mk, &next_start)?;
+        let nf_next = next.select_in_group(dr, next_group)?;
         nf_current.clone().enforce_nonzero(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("SpendBind: current-epoch nullifier is zero".into())
         })?;
