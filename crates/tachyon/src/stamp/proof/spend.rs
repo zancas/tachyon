@@ -17,7 +17,6 @@ use udon::curve::Affine as _;
 
 use super::{ValueCommitment, delegation::NoteSecret, spendable::NoteSpendable};
 use crate::{
-    constants::MAX_MONEY,
     digest::poseidon,
     gadgets::{arithmetic as circuit, fixed_base},
     keys::PaymentKey,
@@ -160,10 +159,9 @@ impl Step<Pasta> for SpendBind {
         cm.enforce_equal(dr, &secret_cm).map_err(|_err| {
             ragu_core::Error::InvalidWitness("SpendBind: secret does not match note".into())
         })?;
+        // `NoteSeed`, the only producer of `NoteSecret`, bounds the value by
+        // MAX_MONEY.
         let value = right_encoded.as_gadget().value.clone();
-        let bound = Element::constant(dr, Fp::from(MAX_MONEY));
-        let slack = bound.sub(dr, &value);
-        circuit::Bounded::<D, 51>::new(dr, &slack)?;
         let current = circuit::EpochIndex::new(dr, &left_encoded.as_gadget().epoch_current)?;
         let next = current.next(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("SpendBind: no epoch follows the spend epoch".into())

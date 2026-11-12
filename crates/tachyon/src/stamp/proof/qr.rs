@@ -989,7 +989,7 @@ impl Step<Pasta> for QrSideDescend {
         }
         let depth_element = left_encoded.as_gadget().depth.clone();
         let profile_bits = left_encoded.as_gadget().bits.clone();
-        circuit::Bounded::<D, 5>::at_most(dr, &depth_element, 31).map_err(|_err| {
+        circuit::Bounded::<D, 5>::new(dr, &depth_element).map_err(|_err| {
             ragu_core::Error::InvalidWitness(
                 "QrSideDescend: profile has no bit left for another side".into(),
             )
@@ -1243,8 +1243,9 @@ impl Step<Pasta> for QrBucketSeal {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded = Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right)?;
         let epoch_element = left_encoded.as_gadget().epoch.clone();
-        let next = circuit::EpochIndex::new(dr, &epoch_element)
-            .and_then(|checked| checked.next(dr))
+        let one = Element::constant(dr, Fp::ONE);
+        let successor = epoch_element.add(dr, &one);
+        let next = circuit::EpochIndex::new(dr, &successor)
             .map_err(|_err| {
                 ragu_core::Error::InvalidWitness(
                     "QrBucketSeal: crossing past the final epoch".into(),
@@ -1448,12 +1449,11 @@ impl Step<Pasta> for QrUnspentInit {
             witness.as_ref().map(|data| data.1),
             witness.as_ref().map(|data| data.2),
         )?;
-        let epoch_element = left_encoded.as_gadget().epoch.clone();
-        let checked_next = circuit::EpochIndex::new(dr, &epoch_element)
-            .and_then(|checked| checked.next(dr))
-            .map_err(|_err| {
-                ragu_core::Error::InvalidWitness("QrUnspentInit: bucket has no next epoch".into())
-            })?;
+        let one = Element::constant(dr, Fp::ONE);
+        let successor = left_encoded.as_gadget().epoch.add(dr, &one);
+        let checked_next = circuit::EpochIndex::new(dr, &successor).map_err(|_err| {
+            ragu_core::Error::InvalidWitness("QrUnspentInit: bucket has no next epoch".into())
+        })?;
         let next_value = checked_next.value()?;
         let epoch_next = checked_next.into_element();
         #[expect(

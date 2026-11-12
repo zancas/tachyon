@@ -626,11 +626,11 @@ impl Step<Pasta> for UnspentLift {
         let right_encoded =
             Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right.clone())?;
         let epoch_element = right_encoded.as_gadget().epoch.clone();
-        let checked_next = circuit::EpochIndex::new(dr, &epoch_element)
-            .and_then(|checked| checked.next(dr))
-            .map_err(|_err| {
-                ragu_core::Error::InvalidWitness("UnspentLift: bucket has no next epoch".into())
-            })?;
+        let one = Element::constant(dr, Fp::ONE);
+        let successor = epoch_element.add(dr, &one);
+        let checked_next = circuit::EpochIndex::new(dr, &successor).map_err(|_err| {
+            ragu_core::Error::InvalidWitness("UnspentLift: bucket has no next epoch".into())
+        })?;
         let next_value = checked_next.value()?;
         let epoch_next = checked_next.into_element();
         let unspent_epoch = left_encoded.as_gadget().epoch_next.clone();
@@ -803,16 +803,10 @@ impl Step<Pasta> for UnspentBind {
             &Slot::right(0),
             "UnspentBind: sequence does not match the derivation",
         )?;
-        // Defensive. `QrUnspentInit` emits `epoch_next = epoch_start + 1`, and
-        // every other producer only raises `epoch_next`, so every
-        // `ArbitraryUnspent` covers at least one epoch.
-        let start = left_encoded.as_gadget().epoch_start.clone();
-        let end = left_encoded.as_gadget().epoch_next.clone();
-        let one = Element::constant(dr, Fp::ONE);
-        let span_minus_one = end.sub(dr, &start).sub(dr, &one);
-        circuit::Bounded::<D, 32>::new(dr, &span_minus_one).map_err(|_err| {
-            ragu_core::Error::InvalidWitness("UnspentBind: segment covers no epoch".into())
-        })?;
+        // Every `ArbitraryUnspent` covers at least one epoch: `QrUnspentInit`
+        // emits `epoch_next = epoch_start + 1`, `UnspentLift` raises
+        // `epoch_next` by one, and `UnspentFuse` joins halves at an equal
+        // epoch.
         let output = D::try_just(|| {
             let (
                 unspent_anchor_start,

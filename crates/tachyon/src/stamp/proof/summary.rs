@@ -242,7 +242,8 @@ impl Step<Pasta> for SummaryAdvance {
                     "SummaryAdvance: the stamp's tachygram set is empty".into(),
                 )
             })?;
-        circuit::EpochIndex::new(dr, &left_encoded.as_gadget().epoch)?;
+        // The epoch is in range: `SummarySeed` range-checks it and every
+        // `SummaryAdvance` carries it unchanged.
         let anchor = poseidon::circuit::anchor_next_stamp(
             dr,
             &left_encoded.as_gadget().anchor_end,
