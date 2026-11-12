@@ -22,11 +22,6 @@ use crate::{
     pasta::{EpAffine, Fp},
 };
 
-fn hash<const L: usize>(domain: &[u8; 16], input: [Fp; L]) -> Fp {
-    let [out] = emulated::<L, 1>(domain, input);
-    out
-}
-
 fn emulated<const L: usize, const N: usize>(domain: &[u8; 16], preimage: [Fp; L]) -> [Fp; N] {
     type Emu = Emulator<Wireless<Always<()>, Fp>>;
     let mut emu = Emu::execute();
@@ -51,7 +46,8 @@ const FEE_BLIND_DOMAIN: &[u8; 16] = b"Tachyon-FeeBlind";
 /// \mathsf{rcm})$.
 #[must_use]
 pub fn feemax_blind(pk: Fp, psi: Fp, rcm: Fp) -> Fp {
-    hash(FEE_BLIND_DOMAIN, [pk, psi, rcm])
+    let [hash] = emulated(FEE_BLIND_DOMAIN, [pk, psi, rcm]);
+    hash
 }
 
 const FEE_DIGEST_DOMAIN: &[u8; 16] = b"Tachyon-FeeDg\0\0\0";
@@ -69,7 +65,9 @@ pub fn fee_digest(cv_feemax: EpAffine, fee: u64) -> Fp {
     let (x, y) = cv_feemax
         .coordinates()
         .expect("cv_feemax must not be the identity");
-    hash(FEE_DIGEST_DOMAIN, [x, y, Fp::from(fee)])
+
+    let [hash] = emulated(FEE_DIGEST_DOMAIN, [x, y, Fp::from(fee)]);
+    hash
 }
 
 const ACTION_DIGEST_DOMAIN: &[u8; 16] = b"Tachyon-ActionDg";
@@ -85,7 +83,9 @@ pub fn action_digest(cv: EpAffine, rk: EpAffine) -> Fp {
     let (cv_x, cv_y) = cv.coordinates().expect("cv must not be the identity");
     #[expect(clippy::expect_used, reason = "callers reject the identity")]
     let (rk_x, rk_y) = rk.coordinates().expect("rk must not be the identity");
-    hash(ACTION_DIGEST_DOMAIN, [cv_x, cv_y, rk_x, rk_y])
+
+    let [hash] = emulated(ACTION_DIGEST_DOMAIN, [cv_x, cv_y, rk_x, rk_y]);
+    hash
 }
 
 const PAYMENT_KEY_DOMAIN: &[u8; 16] = b"Tachyon-PkDerive";
@@ -102,7 +102,9 @@ pub fn payment_key(ak: EpAffine, nk: Fp) -> Fp {
         reason = "ak = [ask]G for a PRF-derived ask is not the identity"
     )]
     let (x, y) = ak.coordinates().expect("ak must not be the identity");
-    hash(PAYMENT_KEY_DOMAIN, [x, y, nk])
+
+    let [hash] = emulated(PAYMENT_KEY_DOMAIN, [x, y, nk]);
+    hash
 }
 
 const NOTE_COMMITMENT_DOMAIN: &[u8; 16] = b"Tachyon-CmDerive";
@@ -110,7 +112,8 @@ const NOTE_COMMITMENT_DOMAIN: &[u8; 16] = b"Tachyon-CmDerive";
 /// Derives a note commitment from note fields.
 #[must_use]
 pub fn note_commitment(rcm: Fp, pk: Fp, value: u64, psi: Fp) -> Fp {
-    hash(NOTE_COMMITMENT_DOMAIN, [rcm, pk, Fp::from(value), psi])
+    let [hash] = emulated(NOTE_COMMITMENT_DOMAIN, [rcm, pk, Fp::from(value), psi]);
+    hash
 }
 
 const PAD_COMMITMENT_DOMAIN: &[u8; 16] = b"Tachyon-CmOutPad";
@@ -123,7 +126,8 @@ const PAD_COMMITMENT_DOMAIN: &[u8; 16] = b"Tachyon-CmOutPad";
 /// observer pair them off and recover the output count.
 #[must_use]
 pub fn pad_tachygram(rcm: Fp, pk: Fp, value: u64, psi: Fp) -> Fp {
-    hash(PAD_COMMITMENT_DOMAIN, [rcm, pk, Fp::from(value), psi])
+    let [hash] = emulated(PAD_COMMITMENT_DOMAIN, [rcm, pk, Fp::from(value), psi]);
+    hash
 }
 
 const NULLIFIER_MASTER_DOMAIN: &[u8; 16] = b"Tachyon-NfMaster";
@@ -137,7 +141,8 @@ const NULLIFIER_MASTER_DOMAIN: &[u8; 16] = b"Tachyon-NfMaster";
 /// $$
 #[must_use]
 pub fn nf_master(psi: Fp, nk: Fp) -> Fp {
-    hash(NULLIFIER_MASTER_DOMAIN, [psi, nk])
+    let [hash] = emulated(NULLIFIER_MASTER_DOMAIN, [psi, nk]);
+    hash
 }
 
 const SPEND_ALPHA_DOMAIN: &[u8; 16] = b"Tachyon-Spend\0\0\0";
@@ -149,7 +154,8 @@ const SPEND_ALPHA_DOMAIN: &[u8; 16] = b"Tachyon-Spend\0\0\0";
 /// $$
 #[must_use]
 pub fn alpha_spend(theta: Fp, cm: Fp) -> Fp {
-    hash(SPEND_ALPHA_DOMAIN, [theta, cm])
+    let [hash] = emulated(SPEND_ALPHA_DOMAIN, [theta, cm]);
+    hash
 }
 
 const OUTPUT_ALPHA_DOMAIN: &[u8; 16] = b"Tachyon-Output\0\0";
@@ -161,7 +167,8 @@ const OUTPUT_ALPHA_DOMAIN: &[u8; 16] = b"Tachyon-Output\0\0";
 /// $$
 #[must_use]
 pub fn alpha_output(theta: Fp, cm: Fp) -> Fp {
-    hash(OUTPUT_ALPHA_DOMAIN, [theta, cm])
+    let [hash] = emulated(OUTPUT_ALPHA_DOMAIN, [theta, cm]);
+    hash
 }
 
 const NULLIFIER_DOMAIN: &[u8; 16] = b"Tachyon-NfDerive";
@@ -187,7 +194,9 @@ pub fn anchor_next_stamp(anchor_prev: Fp, epoch: Fp, stamp_hash: EpAffine) -> Fp
     let (x, y) = stamp_hash
         .coordinates()
         .expect("bridge hash must not be the identity point");
-    hash(ANCHOR_STAMP_DOMAIN, [anchor_prev, epoch, x, y])
+
+    let [hash] = emulated(ANCHOR_STAMP_DOMAIN, [anchor_prev, epoch, x, y]);
+    hash
 }
 
 const QR_BUCKET_DOMAIN: &[u8; 16] = b"Tachyon-QrBucket";
@@ -213,7 +222,8 @@ pub fn evidence_tree_leaf(
     let (contents_x, contents_y) = contents
         .coordinates()
         .expect("bridge hash must not be the identity point");
-    hash(
+
+    let [hash] = emulated(
         QR_BUCKET_DOMAIN,
         [
             epoch,
@@ -225,7 +235,8 @@ pub fn evidence_tree_leaf(
             contents_x,
             contents_y,
         ],
-    )
+    );
+    hash
 }
 
 /// Folds four subtree roots into their parent node of a evidence tree.
@@ -237,7 +248,8 @@ pub fn evidence_tree_leaf(
 /// $$
 #[must_use]
 pub fn evidence_tree_node(children: [Fp; EVIDENCE_TREE_ARITY]) -> Fp {
-    hash(EVIDENCE_NODE_DOMAIN, children)
+    let [hash] = emulated(EVIDENCE_NODE_DOMAIN, children);
+    hash
 }
 
 const ANCHOR_EPOCH_DOMAIN: &[u8; 16] = b"Tachyon-AnchorEp";
@@ -248,7 +260,8 @@ const ANCHOR_EPOCH_DOMAIN: &[u8; 16] = b"Tachyon-AnchorEp";
 /// anchor of the epoch before.
 #[must_use]
 pub fn anchor_next_epoch(anchor_prev: Fp, epoch: Fp) -> Fp {
-    hash(ANCHOR_EPOCH_DOMAIN, [anchor_prev, epoch])
+    let [hash] = emulated(ANCHOR_EPOCH_DOMAIN, [anchor_prev, epoch]);
+    hash
 }
 
 pub(crate) mod circuit {
