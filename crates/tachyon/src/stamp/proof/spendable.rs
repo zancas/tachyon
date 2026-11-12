@@ -155,7 +155,11 @@ impl Step<Pasta> for SpendableInit {
             .and(dr, &equal_y)?
             .element()
             .enforce_zero(dr)
-            .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
+            .map_err(|_err| {
+                ragu_core::Error::InvalidWitness(
+                    "SpendableInit: the stamp's tachygram set is empty".into(),
+                )
+            })?;
         circuit::EpochIndex::new(dr, &epoch)?;
         // The anchor immediately after the creation stamp, computed in-circuit
         // so the proof certifies the fold of `epoch` and `creation_commit`;

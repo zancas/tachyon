@@ -142,7 +142,11 @@ impl Step<Pasta> for SummarySeed {
             .and(dr, &equal_y)?
             .element()
             .enforce_zero(dr)
-            .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
+            .map_err(|_err| {
+                ragu_core::Error::InvalidWitness(
+                    "SummarySeed: the stamp's tachygram set is empty".into(),
+                )
+            })?;
         circuit::EpochIndex::new(dr, &epoch_element)?;
         let anchor = poseidon::circuit::anchor_next_stamp(
             dr,
@@ -233,7 +237,11 @@ impl Step<Pasta> for SummaryAdvance {
             .and(dr, &equal_y)?
             .element()
             .enforce_zero(dr)
-            .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
+            .map_err(|_err| {
+                ragu_core::Error::InvalidWitness(
+                    "SummaryAdvance: the stamp's tachygram set is empty".into(),
+                )
+            })?;
         circuit::EpochIndex::new(dr, &left_encoded.as_gadget().epoch)?;
         let anchor = poseidon::circuit::anchor_next_stamp(
             dr,

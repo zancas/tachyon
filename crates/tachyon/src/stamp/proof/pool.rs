@@ -311,7 +311,11 @@ impl Step<Pasta> for AnchorSpanSeed {
             .and(dr, &equal_y)?
             .element()
             .enforce_zero(dr)
-            .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
+            .map_err(|_err| {
+                ragu_core::Error::InvalidWitness(
+                    "AnchorSpanSeed: the stamp's tachygram set is empty".into(),
+                )
+            })?;
         circuit::EpochIndex::new(dr, &epoch_element)?;
         let anchor_element = poseidon::circuit::anchor_next_stamp(
             dr,
