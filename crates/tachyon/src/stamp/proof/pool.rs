@@ -46,7 +46,7 @@ use udon::field::Field as _;
 use super::{delegation::NoteNullifiers, qr::QrBucket};
 use crate::{
     digest::poseidon,
-    gadgets::arithmetic as circuit,
+    gadgets::{self, arithmetic as circuit},
     note::{self},
     pasta::Fp,
     primitives::{
@@ -651,7 +651,13 @@ impl Step<Pasta> for UnspentLift {
         value_element.clone().enforce_nonzero(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("UnspentLift: tested value is zero".into())
         })?;
-        right_encoded.as_gadget().enforce_value_profile(
+        let bucket = right_encoded.as_gadget();
+        let profile = gadgets::qr::QrProfile {
+            discriminant: bucket.discriminant.clone(),
+            depth: bucket.depth.clone(),
+            bits: bucket.bits.clone(),
+        };
+        profile.enforce_value(
             dr,
             &value_element,
             witness.as_ref().map(|data| data.1),

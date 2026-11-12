@@ -9,6 +9,7 @@ use crate::pasta::{EpAffine, Fp};
 
 pub(crate) mod arithmetic;
 pub(crate) mod fixed_base;
+pub(crate) mod qr;
 
 /// The affine coordinates of a point, read through its [`Write`] encoding.
 ///

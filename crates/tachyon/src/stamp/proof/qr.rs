@@ -51,7 +51,7 @@ pub use crate::collections::qr::classify;
 use crate::{
     collections::qr::QUADRATIC_NON_RESIDUE,
     digest::poseidon,
-    gadgets::arithmetic as circuit,
+    gadgets::{self, arithmetic as circuit},
     pasta::{EpAffine, Fp},
     primitives::{
         Anchor, EpochIndex, NfSeqPoly, QrClassRoot, QrDiscriminant, QrInterpolantPoly, QrProfile,
@@ -1098,88 +1098,6 @@ pub struct QrBucketOutput<'dr, D: Driver<'dr>> {
     pub contents_hash: [Element<'dr, D>; 2],
 }
 
-impl<'dr, D: Driver<'dr, F = Fp>> QrBucketOutput<'dr, D> {
-    /// Fix `value`'s side at every discriminant of the progression from this
-    /// bucket's discriminant, and check this bucket's profile is the value's
-    /// first `depth` sides.
-    ///
-    /// The relations and their soundness are on [`QrUnspentInit`].
-    /// [`UnspentLift`](super::pool::UnspentLift) runs the same checks.
-    #[expect(clippy::indexing_slicing, reason = "fixed 32-position profile arrays")]
-    pub(super) fn enforce_value_profile(
-        &self,
-        dr: &mut D,
-        value: &Element<'dr, D>,
-        classes: DriverValue<D, [QrClassRoot; QrProfile::MAX_DEPTH]>,
-        mask: DriverValue<D, [bool; QrProfile::MAX_DEPTH]>,
-    ) -> ragu_core::Result<()> {
-        let mut shifted = value.add(dr, &self.discriminant);
-        let mut depth_acc = Element::constant(dr, Fp::ZERO);
-        let mut index_acc = Element::constant(dr, Fp::ZERO);
-        let mut bits_acc = Element::constant(dr, Fp::ZERO);
-        let one = Element::constant(dr, Fp::ONE);
-        let non_residue = Element::constant(dr, QUADRATIC_NON_RESIDUE);
-        let mut position_element = Element::constant(dr, Fp::ZERO);
-        for position in 0..QrProfile::MAX_DEPTH {
-            let side = Boolean::alloc(
-                dr,
-                &mut (),
-                classes.as_ref().map(|values| values[position].0),
-            )?;
-            let root = Element::alloc(
-                dr,
-                &mut (),
-                classes.as_ref().map(|values| values[position].1),
-            )?;
-            let selected =
-                Boolean::alloc(dr, &mut (), mask.as_ref().map(|values| values[position]))?;
-            let multiplier = side.conditional_select(dr, &non_residue, &one)?;
-            let expected_square = multiplier.mul(dr, &shifted)?;
-            root.square(dr)?
-                .enforce_equal(dr, &expected_square)
-                .map_err(|_err| {
-                    ragu_core::Error::InvalidWitness(
-                        "QR profile: root does not square to the claimed class".into(),
-                    )
-                })?;
-            side.conditional_select(dr, &shifted, &one)?
-                .enforce_nonzero(dr)
-                .map_err(|_err| {
-                    ragu_core::Error::InvalidWitness(
-                        "QR profile: exceptional discriminant claimed the non-residue class".into(),
-                    )
-                })?;
-            depth_acc = depth_acc.add(dr, &selected.element());
-            let index_term = selected.element().mul(dr, &position_element)?;
-            index_acc = index_acc.add(dr, &index_term);
-            let selected_term = bits_acc.add(dr, &side.element());
-            let bits_term = selected.element().mul(dr, &selected_term)?;
-            bits_acc = bits_acc.add(dr, &bits_term);
-            shifted = shifted.add(dr, &one);
-            position_element = position_element.add(dr, &one);
-        }
-        depth_acc.enforce_equal(dr, &self.depth).map_err(|_err| {
-            ragu_core::Error::InvalidWitness(
-                "QR profile: depth mask does not match the bucket's depth".into(),
-            )
-        })?;
-        let depth_minus_one = depth_acc.sub(dr, &one);
-        let expected_index_sum = depth_acc.mul(dr, &depth_minus_one)?;
-        index_acc
-            .double(dr)
-            .enforce_equal(dr, &expected_index_sum)
-            .map_err(|_err| {
-                ragu_core::Error::InvalidWitness("QR profile: depth mask is not a prefix".into())
-            })?;
-        bits_acc.enforce_equal(dr, &self.bits).map_err(|_err| {
-            ragu_core::Error::InvalidWitness(
-                "QR profile: value does not take the bucket's profile".into(),
-            )
-        })?;
-        Ok(())
-    }
-}
-
 impl Header<Fp> for QrBucket {
     /// `(epoch, anchor_start, anchor_next, discriminant, profile,
     /// contents_hash)`
@@ -1531,7 +1449,13 @@ impl Step<Pasta> for QrUnspentInit {
         value_element.clone().enforce_nonzero(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("QrUnspentInit: tested value is zero".into())
         })?;
-        left_encoded.as_gadget().enforce_value_profile(
+        let bucket = left_encoded.as_gadget();
+        let profile = gadgets::qr::QrProfile {
+            discriminant: bucket.discriminant.clone(),
+            depth: bucket.depth.clone(),
+            bits: bucket.bits.clone(),
+        };
+        profile.enforce_value(
             dr,
             &value_element,
             witness.as_ref().map(|data| data.1),
