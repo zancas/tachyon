@@ -323,7 +323,6 @@ impl Step<Pasta> for NullifierDerive {
         clippy::integer_division,
         clippy::integer_division_remainder_used,
         clippy::indexing_slicing,
-        clippy::missing_asserts_for_indexing,
         reason = "the fixed sponge rate divides the window width; indices are fixed"
     )]
     fn witness<'dr, 'source: 'dr, D: Driver<'dr, F = Fp>, const HEADER_SIZE: usize>(
