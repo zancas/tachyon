@@ -17,18 +17,12 @@ use ragu::{
 };
 use ragu_core::{
     PoseidonPermutation as _,
-    drivers::{Driver, DriverValue},
+    drivers::{Coeff, Driver, DriverValue},
     gadgets::{Bound, Gadget, Kind},
     maybe::Maybe as _,
     pasta::{Pasta, PoseidonFp},
 };
-use ragu_primitives::{
-    Boolean, Element, GadgetExt as _, Point,
-    allocator::Allocator,
-    io::Write,
-    multipack,
-    vec::{ConstLen, FixedVec},
-};
+use ragu_primitives::{Element, GadgetExt as _, Point, allocator::Allocator, io::Write};
 use udon::{curve::Affine as _, field::Field as _};
 
 use crate::{
@@ -356,24 +350,12 @@ impl Step<Pasta> for NullifierDerive {
         let epoch_start =
             Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.0)))?;
         epoch_start.enforce_equal(dr, &oracles.staged()[0])?;
-        let epoch_bits = FixedVec::<_, ConstLen<32>>::try_from_fn(|index| {
-            Boolean::alloc(
-                dr,
-                &mut (),
-                epoch_start
-                    .value()
-                    .map(|candidate| candidate.to_le_bits().as_ref()[index]),
-            )
-        })?;
-        multipack(dr, &epoch_bits)?[0].enforce_equal(dr, &epoch_start)?;
-        let low = &epoch_bits[0];
-        let high = &epoch_bits[1];
-        low.element().enforce_zero(dr).map_err(|_err| {
-            ragu_core::Error::InvalidWitness(
-                "NullifierDerive: epoch_start is not group-aligned".into(),
-            )
-        })?;
-        high.element().enforce_zero(dr).map_err(|_err| {
+        // `epoch_start = 4 · group` with `group < 2^30`: a multiple of four
+        // below 2^32, so `4 · group` cannot wrap.
+        #[expect(clippy::expect_used, reason = "four is invertible in Fp")]
+        let quarter = Fp::from(4).invert().expect("four is invertible");
+        let group = epoch_start.scale(dr, Coeff::Arbitrary(quarter));
+        circuit::Bounded::<D, 30>::new(dr, &group).map_err(|_err| {
             ragu_core::Error::InvalidWitness(
                 "NullifierDerive: epoch_start is not group-aligned".into(),
             )
