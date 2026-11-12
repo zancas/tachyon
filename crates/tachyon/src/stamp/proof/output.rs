@@ -12,8 +12,8 @@ use ragu_core::{
     maybe::Maybe as _,
     pasta::Pasta,
 };
-use ragu_primitives::{Element, GadgetExt as _, Point, allocator::Allocator, io::Write};
-use udon::curve::{Affine as _, EndomorphismAffine};
+use ragu_primitives::{Element, Point, allocator::Allocator, io::Write};
+use udon::curve::EndomorphismAffine;
 
 use crate::{
     Tachygram,
@@ -140,19 +140,7 @@ impl Step<Pasta> for OutputBind {
         pad.clone().enforce_nonzero(dr)?;
         let blind_point =
             fixed_base::R_TABLE.mul_free(dr, &witness.as_ref().map(|data| Fq::from(data.1)))?;
-        let walked = fixed_base::NEG_V_TABLE.mul_bounded(dr, &amount, &blind_point)?;
-        let [walked_x, walked_y] = walked.each_ref().map(Element::value);
-        let cv = Point::alloc(
-            dr,
-            D::try_just(|| {
-                EpAffine::from_xy(*walked_x.take(), *walked_y.take()).ok_or_else(|| {
-                    ragu_core::Error::InvalidWitness("OutputBind: cv is not on the curve".into())
-                })
-            })?,
-        )?;
-        for (coordinate, expected) in gadgets::coordinates(dr, &cv)?.iter().zip(&walked) {
-            coordinate.enforce_equal(dr, expected)?;
-        }
+        let cv = fixed_base::NEG_V_TABLE.mul_bounded(dr, &amount, &blind_point)?;
         let output = D::just(|| {
             (
                 Tachygram::from(*cm.value().take()),

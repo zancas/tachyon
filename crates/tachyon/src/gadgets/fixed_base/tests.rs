@@ -20,12 +20,11 @@ fn alloc_bits<'dr, const N: usize>(
     })
 }
 
-fn multiply<const W: usize, const N: usize>(table: &Table<W>, bits: [bool; N]) -> Result<(Fp, Fp)> {
-    let mut output = (Fp::ZERO, Fp::ZERO);
+fn multiply<const W: usize, const N: usize>(table: &Table<W>, bits: [bool; N]) -> Result<EpAffine> {
+    let mut output = Ep::identity().to_affine();
     Simulator::<Fp>::simulate((), |dr, _| {
         let allocated = alloc_bits(dr, bits)?;
-        let [x, y] = table.multiply(dr, &allocated, None)?;
-        output = (*x.value().take(), *y.value().take());
+        output = table.multiply(dr, &allocated, None)?.value().take();
         Ok(())
     })?;
     Ok(output)
@@ -53,7 +52,7 @@ fn multiplications_compute_the_binary_value() {
             if expected.is_identity() {
                 assert!(output.is_err());
             } else {
-                assert_eq!(output.unwrap(), expected.to_affine().coordinates().unwrap());
+                assert_eq!(output.unwrap(), expected.to_affine());
             }
         }
     }
@@ -75,7 +74,7 @@ fn multiplications_compute_the_binary_value() {
             if expected.is_identity() {
                 assert!(output.is_err());
             } else {
-                assert_eq!(output.unwrap(), expected.to_affine().coordinates().unwrap());
+                assert_eq!(output.unwrap(), expected.to_affine());
             }
         }
     }
@@ -156,13 +155,10 @@ fn value_commitments_accept_zero_and_reject_wide_values() {
         let result = Simulator::<Fp>::simulate((amount, blind), |dr, witness| {
             let value = Element::alloc(dr, &mut (), witness.as_ref().map(|pair| pair.0))?;
             let blind_point = R_TABLE.mul_free(dr, &witness.as_ref().map(|pair| pair.1))?;
-            let [cv_x, cv_y] = NEG_V_TABLE.mul_bounded(dr, &value, &blind_point)?;
+            let cv = NEG_V_TABLE.mul_bounded(dr, &value, &blind_point)?;
             let expected = *orchard::VALUE_COMMIT_R * blind
                 - *orchard::VALUE_COMMIT_V * scalar(&amount.to_le_bits().as_ref()[..51]);
-            assert_eq!(
-                (*cv_x.value().take(), *cv_y.value().take()),
-                expected.to_affine().coordinates().unwrap()
-            );
+            assert_eq!(cv.value().take(), expected.to_affine());
             Ok(())
         });
         assert_eq!(result.is_ok(), valid);
@@ -178,12 +174,9 @@ fn fee_commitment_accepts_a_zero_maximum() {
             let digest = Element::constant(dr, Fp::from(11));
             let slack = Element::constant(dr, Fp::from(MAX_MONEY - maximum));
             let blind_point = R_TABLE.mul_canonical(dr, &digest, None)?;
-            let [cv_x, cv_y] = fee_table.mul_bounded(dr, &slack, &blind_point)?;
+            let cv = fee_table.mul_bounded(dr, &slack, &blind_point)?;
             let expected = *orchard::VALUE_COMMIT_R * Fq::from(11) - value_base * Fq::from(maximum);
-            assert_eq!(
-                (*cv_x.value().take(), *cv_y.value().take()),
-                expected.to_affine().coordinates().unwrap()
-            );
+            assert_eq!(cv.value().take(), expected.to_affine());
             Ok(())
         })
         .unwrap();
@@ -193,18 +186,14 @@ fn fee_commitment_accepts_a_zero_maximum() {
 #[test]
 fn digest_multiplications_use_the_canonical_value() {
     let ak = *ACTION_AUTH_GENERATOR * Fq::from(5);
-    let (ak_x, ak_y) = ak.to_affine().coordinates().unwrap();
     for digest in [Fp::ONE, -Fp::ONE, Fp::from(2).pow_u64(254)] {
         Simulator::<Fp>::simulate(digest, |dr, witness| {
             let element = Element::alloc(dr, &mut (), witness)?;
-            let start = [Element::constant(dr, ak_x), Element::constant(dr, ak_y)];
-            let [rk_x, rk_y] = G_TABLE.mul_canonical(dr, &element, Some(&start))?;
+            let start = Point::constant(dr, ak.to_affine())?;
+            let rk = G_TABLE.mul_canonical(dr, &element, Some(&start))?;
             let expected =
                 *ACTION_AUTH_GENERATOR * scalar(&digest.to_le_bits().as_ref()[..255]) + ak;
-            assert_eq!(
-                (*rk_x.value().take(), *rk_y.value().take()),
-                expected.to_affine().coordinates().unwrap()
-            );
+            assert_eq!(rk.value().take(), expected.to_affine());
             Ok(())
         })
         .unwrap();

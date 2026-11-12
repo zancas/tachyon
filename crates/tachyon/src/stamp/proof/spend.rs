@@ -13,7 +13,7 @@ use ragu_core::{
     pasta::Pasta,
 };
 use ragu_primitives::{Element, GadgetExt as _, Point, allocator::Allocator, io::Write};
-use udon::curve::{Affine as _, EndomorphismAffine};
+use udon::curve::EndomorphismAffine;
 
 use super::{delegation::NoteSecret, spendable::NoteSpendable};
 use crate::{
@@ -183,19 +183,7 @@ impl Step<Pasta> for SpendBind {
 
         let blind_point =
             fixed_base::R_TABLE.mul_free(dr, &witness.as_ref().map(|data| Fq::from(data.0)))?;
-        let walked = fixed_base::V_TABLE.mul_bounded(dr, &value, &blind_point)?;
-        let [walked_x, walked_y] = walked.each_ref().map(Element::value);
-        let cv = Point::alloc(
-            dr,
-            D::try_just(|| {
-                EpAffine::from_xy(*walked_x.take(), *walked_y.take()).ok_or_else(|| {
-                    ragu_core::Error::InvalidWitness("SpendBind: cv is not on the curve".into())
-                })
-            })?,
-        )?;
-        for (coordinate, expected) in gadgets::coordinates(dr, &cv)?.iter().zip(&walked) {
-            coordinate.enforce_equal(dr, expected)?;
-        }
+        let cv = fixed_base::V_TABLE.mul_bounded(dr, &value, &blind_point)?;
         let output = D::just(|| {
             let (spendable_cm, _, anchor) = left.take();
             let (_, note, _) = right.take();

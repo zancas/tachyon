@@ -31,7 +31,7 @@ use ragu_core::{
     maybe::Maybe as _,
 };
 use ragu_primitives::{
-    Boolean, Element, GadgetExt as _, multiadd, multipack,
+    Boolean, Element, GadgetExt as _, Point, multiadd, multipack,
     vec::{ConstLen, FixedVec},
 };
 use udon::{
@@ -41,7 +41,8 @@ use udon::{
 
 use crate::{
     constants::orchard::{self, ACTION_AUTH_GENERATOR},
-    pasta::{Ep, Fp, Fq},
+    gadgets,
+    pasta::{Ep, EpAffine, Fp, Fq},
 };
 
 lazy_static! {
@@ -264,7 +265,7 @@ impl<const W: usize> Table<W> {
             })?;
             dr.enforce_equal(&run_wire, run.wire())?;
             dr.enforce_equal(&rise_wire, rise.wire())?;
-            prefix = Self::add_with_slope(
+            prefix = add_with_slope(
                 dr,
                 prefix.each_ref(),
                 &Element::promote(slope, slope_value),
@@ -275,54 +276,68 @@ impl<const W: usize> Table<W> {
         Ok([prefix, top])
     }
 
-    /// Adds `point` to `sum` in four gates, constraining their x coordinates
-    /// distinct.
-    fn add_checked<'dr, D: Driver<'dr, F = Fp>>(
-        dr: &mut D,
-        sum: [&Element<'dr, D>; 2],
-        [x, y]: [&Element<'dr, D>; 2],
-    ) -> Result<[Element<'dr, D>; 2]> {
-        let [sum_x, sum_y] = sum;
-        let run = x.sub(dr, sum_x).enforce_nonzero(dr)?;
-        let slope = y.sub(dr, sum_y).divide(dr, &run)?;
-        Self::add_with_slope(dr, sum, &slope, x)
-    }
-
-    /// Completes an addition onto `sum` from the slope and the other
-    /// operand's x coordinate, in two gates.
-    fn add_with_slope<'dr, D: Driver<'dr, F = Fp>>(
-        dr: &mut D,
-        [sum_x, sum_y]: [&Element<'dr, D>; 2],
-        slope: &Element<'dr, D>,
-        x: &Element<'dr, D>,
-    ) -> Result<[Element<'dr, D>; 2]> {
-        let result_x = slope.square(dr)?.sub(dr, sum_x).sub(dr, x);
-        let difference = sum_x.sub(dr, &result_x);
-        let result_y = slope.mul(dr, &difference)?.sub(dr, sum_y);
-        Ok([result_x, result_y])
-    }
-
-    /// The coordinates of $\[k\]B + C + P$ for the binary value $k$ of
-    /// `bits`, joining `onto` ($P$, when present) between the prefix and the
-    /// top entry.
+    /// $\[k\]B + C + P$ for the binary value $k$ of `bits`, joining `onto`
+    /// ($P$, when present) between the prefix and the top entry. The result
+    /// is allocated as a [`Point`] constrained equal to the computed
+    /// coordinates.
     fn multiply<'dr, D: Driver<'dr, F = Fp>, const N: usize>(
         &self,
         dr: &mut D,
         bits: &FixedVec<Boolean<'dr, D>, ConstLen<N>>,
-        onto: Option<&[Element<'dr, D>; 2]>,
-    ) -> Result<[Element<'dr, D>; 2]> {
+        onto: Option<&Point<'dr, D, EpAffine>>,
+    ) -> Result<Point<'dr, D, EpAffine>> {
         let [mut sum, top] = self.prefix_and_top(dr, bits)?;
         if let Some(point) = onto {
-            sum = Self::add_checked(dr, sum.each_ref(), point.each_ref())?;
+            let coordinates = gadgets::coordinates(dr, point)?;
+            sum = add_checked(dr, sum.each_ref(), coordinates.each_ref())?;
         }
-        Self::add_checked(dr, sum.each_ref(), top.each_ref())
+        let result = add_checked(dr, sum.each_ref(), top.each_ref())?;
+        let [x, y] = result.each_ref().map(Element::value);
+        let point = Point::alloc(
+            dr,
+            D::try_just(|| {
+                EpAffine::from_xy(*x.take(), *y.take()).ok_or_else(|| {
+                    Error::InvalidWitness("fixed-base result is not on the curve".into())
+                })
+            })?,
+        )?;
+        for (written, computed) in gadgets::coordinates(dr, &point)?.iter().zip(&result) {
+            written.enforce_equal(dr, computed)?;
+        }
+        Ok(point)
     }
 }
 
+/// Adds `point` to `sum` in four gates, constraining their x coordinates
+/// distinct.
+fn add_checked<'dr, D: Driver<'dr, F = Fp>>(
+    dr: &mut D,
+    sum: [&Element<'dr, D>; 2],
+    [x, y]: [&Element<'dr, D>; 2],
+) -> Result<[Element<'dr, D>; 2]> {
+    let [sum_x, sum_y] = sum;
+    let run = x.sub(dr, sum_x).enforce_nonzero(dr)?;
+    let slope = y.sub(dr, sum_y).divide(dr, &run)?;
+    add_with_slope(dr, sum, &slope, x)
+}
+
+/// Completes an addition onto `sum` from the slope and the other operand's x
+/// coordinate, in two gates.
+fn add_with_slope<'dr, D: Driver<'dr, F = Fp>>(
+    dr: &mut D,
+    [sum_x, sum_y]: [&Element<'dr, D>; 2],
+    slope: &Element<'dr, D>,
+    x: &Element<'dr, D>,
+) -> Result<[Element<'dr, D>; 2]> {
+    let result_x = slope.square(dr)?.sub(dr, sum_x).sub(dr, x);
+    let difference = sum_x.sub(dr, &result_x);
+    let result_y = slope.mul(dr, &difference)?.sub(dr, sum_y);
+    Ok([result_x, result_y])
+}
+
 impl Table<85> {
-    /// The coordinates of $\[h\]B + P$ for the canonical value of a digest
-    /// $h$. The 255 bits are compared against $p - 1$, so $h$ and $h + p$
-    /// cannot both decode.
+    /// $\[h\]B + P$ for the canonical value of a digest $h$. The 255 bits are
+    /// compared against $p - 1$, so $h$ and $h + p$ cannot both decode.
     #[expect(
         clippy::indexing_slicing,
         reason = "multipack splits 255 bits into a 254-bit and a 1-bit chunk"
@@ -331,8 +346,8 @@ impl Table<85> {
         &self,
         dr: &mut D,
         digest: &Element<'dr, D>,
-        onto: Option<&[Element<'dr, D>; 2]>,
-    ) -> Result<[Element<'dr, D>; 2]> {
+        onto: Option<&Point<'dr, D, EpAffine>>,
+    ) -> Result<Point<'dr, D, EpAffine>> {
         let bits = FixedVec::<_, ConstLen<255>>::try_from_fn(|index| {
             Boolean::alloc(
                 dr,
@@ -349,14 +364,14 @@ impl Table<85> {
         self.multiply(dr, &bits, onto)
     }
 
-    /// The coordinates of $\[k\]B$ for some $k$ whose 255 free bits nothing
-    /// recomposes: $r$ or $r + q$, for a blind nothing else binds.
+    /// $\[k\]B$ for some $k$ whose 255 free bits nothing recomposes: $r$ or
+    /// $r + q$, for a blind nothing else binds.
     #[expect(clippy::indexing_slicing, reason = "native fixed field representation")]
     pub(crate) fn mul_free<'dr, D: Driver<'dr, F = Fp>>(
         &self,
         dr: &mut D,
         scalar: &DriverValue<D, Fq>,
-    ) -> Result<[Element<'dr, D>; 2]> {
+    ) -> Result<Point<'dr, D, EpAffine>> {
         let bits = FixedVec::<_, ConstLen<255>>::try_from_fn(|index| {
             Boolean::alloc(
                 dr,
@@ -402,10 +417,10 @@ impl Table<85> {
 }
 
 impl Table<17> {
-    /// The coordinates of $\[v\]B + C + P$ for $v$ decomposed into 51 bits,
-    /// which doubles as the range check $v < 2^{51}$. As in Orchard's short
-    /// path, $v$ is a magnitude and a sign; Tachyon's sign is constant per
-    /// step and lives in the base.
+    /// $\[v\]B + C + P$ for $v$ decomposed into 51 bits, which doubles as the
+    /// range check $v < 2^{51}$. As in Orchard's short path, $v$ is a
+    /// magnitude and a sign; Tachyon's sign is constant per step and lives in
+    /// the base.
     #[expect(
         clippy::indexing_slicing,
         reason = "multipack packs 51 bits into one chunk"
@@ -414,8 +429,8 @@ impl Table<17> {
         &self,
         dr: &mut D,
         value: &Element<'dr, D>,
-        onto: &[Element<'dr, D>; 2],
-    ) -> Result<[Element<'dr, D>; 2]> {
+        onto: &Point<'dr, D, EpAffine>,
+    ) -> Result<Point<'dr, D, EpAffine>> {
         let bits = FixedVec::<_, ConstLen<51>>::try_from_fn(|index| {
             Boolean::alloc(
                 dr,
