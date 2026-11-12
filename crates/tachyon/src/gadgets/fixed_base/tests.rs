@@ -3,7 +3,6 @@ use alloc::{format, vec::Vec};
 use ragu_primitives::Simulator;
 
 use super::*;
-use crate::constants::MAX_MONEY;
 
 fn scalar(bits: &[bool]) -> Fq {
     bits.iter().rev().fold(Fq::ZERO, |acc, bit| {
@@ -62,15 +61,14 @@ fn multiplications_compute_the_binary_value() {
         .map(|amount| array::from_fn(|index| amount & (1 << index) != 0))
         .into();
     short.extend(digits.map(|digit| <[bool; 51]>::try_from([digit; 17].as_flattened()).unwrap()));
-    for (base, correction) in [
-        (value_base, Ep::identity()),
-        (-value_base, Ep::identity()),
-        (value_base, -value_base * Fq::from(MAX_MONEY)),
+    for (base, correction, table) in [
+        (value_base, Ep::identity(), &*V_TABLE),
+        (-value_base, Ep::identity(), &*NEG_V_TABLE),
+        (value_base, -value_base * Fq::from(MAX_MONEY), &*FEE_V_TABLE),
     ] {
-        let table = Table::<17>::new(base, correction);
         for bits in &short {
             let expected = base * scalar(bits) + correction;
-            let output = multiply(&table, *bits);
+            let output = multiply(table, *bits);
             if expected.is_identity() {
                 assert!(output.is_err());
             } else {
@@ -168,13 +166,12 @@ fn value_commitments_accept_zero_and_reject_wide_values() {
 #[test]
 fn fee_commitment_accepts_a_zero_maximum() {
     let value_base = *orchard::VALUE_COMMIT_V;
-    let fee_table = Table::<17>::new(value_base, -value_base * Fq::from(MAX_MONEY));
     for maximum in [0u64, 1, MAX_MONEY] {
         Simulator::<Fp>::simulate((), |dr, _| {
             let digest = Element::constant(dr, Fp::from(11));
             let slack = Element::constant(dr, Fp::from(MAX_MONEY - maximum));
             let blind_point = R_TABLE.mul_canonical(dr, &digest, None)?;
-            let cv = fee_table.mul_bounded(dr, &slack, &blind_point)?;
+            let cv = FEE_V_TABLE.mul_bounded(dr, &slack, &blind_point)?;
             let expected = *orchard::VALUE_COMMIT_R * Fq::from(11) - value_base * Fq::from(maximum);
             assert_eq!(cv.value().take(), expected.to_affine());
             Ok(())

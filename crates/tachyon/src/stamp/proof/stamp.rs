@@ -4,7 +4,6 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use lazy_static::lazy_static;
 use ragu::{
     header::{Header, Suffix},
     step::{Encoded, HeaderInput, Index, Oracles, Slot, Step},
@@ -21,13 +20,13 @@ use udon::{curve::Affine as _, field::Field as _};
 use super::{output::OutputHeader, pool::AnchorSpan, spend::SpendHeader};
 use crate::{
     ActionSetPoly, TachygramSetPoly,
-    constants::{MAX_MONEY, orchard},
+    constants::MAX_MONEY,
     digest::poseidon,
     entropy::ActionEntropy,
     gadgets::{self, fixed_base},
     keys::{ProofAuthorizingKey, private},
     note::{self, Note},
-    pasta::{EpAffine, Fp, Fq},
+    pasta::{EpAffine, Fp},
     primitives::{ActionDigest, Anchor, TachygramSetBridge, effect},
     relations::enforce::{enforce_poly_equal, enforce_poly_product, enforce_poly_roots},
     value,
@@ -783,14 +782,6 @@ impl Step<Pasta> for ActionLift {
 #[derive(Debug)]
 pub struct FeeFuse;
 
-lazy_static! {
-    // s = MAX_MONEY - maximum, so the corrected multiplication computes [-maximum]V.
-    static ref FEE_V_TABLE: fixed_base::Table<17> = fixed_base::Table::new(
-        *orchard::VALUE_COMMIT_V,
-        -*orchard::VALUE_COMMIT_V * Fq::from(MAX_MONEY)
-    );
-}
-
 impl Step<Pasta> for FeeFuse {
     type Aux<'source> = ();
     type Left = Actions;
@@ -895,7 +886,7 @@ impl Step<Pasta> for FeeFuse {
             actual.enforce_equal(dr, &oracles.staged()[index])?;
         }
         let blind_point = fixed_base::R_TABLE.mul_canonical(dr, &blind, None)?;
-        let cv = FEE_V_TABLE
+        let cv = fixed_base::FEE_V_TABLE
             .mul_bounded(dr, &slack, &blind_point)
             .map_err(|_err| {
                 ragu_core::Error::InvalidWitness("FeeFuse: maximum fee exceeds MAX_MONEY".into())

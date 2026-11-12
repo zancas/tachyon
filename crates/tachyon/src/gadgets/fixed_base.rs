@@ -40,7 +40,10 @@ use udon::{
 };
 
 use crate::{
-    constants::orchard::{self, ACTION_AUTH_GENERATOR},
+    constants::{
+        MAX_MONEY,
+        orchard::{self, ACTION_AUTH_GENERATOR},
+    },
     gadgets,
     pasta::{Ep, EpAffine, Fp, Fq},
 };
@@ -51,6 +54,11 @@ lazy_static! {
     pub(crate) static ref V_TABLE: Table<17> = Table::new(*orchard::VALUE_COMMIT_V, Ep::identity());
     pub(crate) static ref NEG_V_TABLE: Table<17> =
         Table::new(-*orchard::VALUE_COMMIT_V, Ep::identity());
+    /// Multiplied by `MAX_MONEY - maximum`, computes $[-\mathsf{maximum}]\mathcal{V}$.
+    pub(crate) static ref FEE_V_TABLE: Table<17> = Table::new(
+        *orchard::VALUE_COMMIT_V,
+        -*orchard::VALUE_COMMIT_V * Fq::from(MAX_MONEY)
+    );
 }
 
 /// Two-gate selection of one of eight fixed points by three little-endian
