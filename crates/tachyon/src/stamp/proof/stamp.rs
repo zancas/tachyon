@@ -226,7 +226,7 @@ impl Step<Pasta> for OutputAction {
         let theta = Element::alloc(dr, &mut (), witness.as_ref().map(|data| data.0.0))?;
         let alpha = poseidon::circuit::alpha_output(dr, &theta, &cm_root)?;
         let [rk_x, rk_y] = fixed_base::G_TABLE.mul_canonical(dr, &alpha, None)?;
-        let [cv_x, cv_y] = left_encoded.as_gadget().cv.coordinates.clone();
+        let [cv_x, cv_y] = gadgets::coordinates(dr, &left_encoded.as_gadget().cv)?;
         let action_root = poseidon::circuit::action_digest(dr, (&cv_x, &cv_y), (&rk_x, &rk_y))?;
         #[expect(clippy::indexing_slicing, reason = "framework enforces NUM_STAGED = 1")]
         let staged_root = &oracles.staged()[0];
@@ -374,7 +374,7 @@ impl Step<Pasta> for SpendAction {
         let theta = Element::alloc(dr, &mut (), witness.as_ref().map(|data| data.0.0))?;
         let alpha = poseidon::circuit::alpha_spend(dr, &theta, &cm)?;
         let [rk_x, rk_y] = fixed_base::G_TABLE.mul_canonical(dr, &alpha, Some(&[ak_x, ak_y]))?;
-        let [cv_x, cv_y] = left_encoded.as_gadget().cv.coordinates.clone();
+        let [cv_x, cv_y] = gadgets::coordinates(dr, &left_encoded.as_gadget().cv)?;
         let action_root = poseidon::circuit::action_digest(dr, (&cv_x, &cv_y), (&rk_x, &rk_y))?;
         #[expect(clippy::indexing_slicing, reason = "framework enforces NUM_STAGED = 1")]
         let staged_root = &oracles.staged()[0];

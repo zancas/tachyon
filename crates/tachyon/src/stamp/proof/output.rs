@@ -12,15 +12,14 @@ use ragu_core::{
     maybe::Maybe as _,
     pasta::Pasta,
 };
-use ragu_primitives::{Element, allocator::Allocator, io::Write};
-use udon::curve::Affine as _;
+use ragu_primitives::{Element, GadgetExt as _, Point, allocator::Allocator, io::Write};
+use udon::curve::{Affine as _, EndomorphismAffine};
 
-use super::ValueCommitment;
 use crate::{
     Tachygram,
     constants::MAX_MONEY,
     digest::poseidon,
-    gadgets::{arithmetic as circuit, fixed_base},
+    gadgets::{self, arithmetic as circuit, fixed_base},
     note::Note,
     pasta::{EpAffine, Fp, Fq},
     value,
@@ -36,16 +35,17 @@ use crate::{
 pub struct OutputHeader;
 
 #[derive(Gadget, Write)]
-pub struct OutputHeaderOutput<'dr, D: Driver<'dr>> {
+pub struct OutputHeaderOutput<'dr, D: Driver<'dr>, C: EndomorphismAffine<Base = D::F>> {
     pub cm: Element<'dr, D>,
     pub pad: Element<'dr, D>,
-    pub cv: ValueCommitment<'dr, D>,
+    #[ragu(gadget)]
+    pub cv: Point<'dr, D, C>,
 }
 
 impl Header<Fp> for OutputHeader {
     /// `(cm, pad, cv)`
     type Data = (Tachygram, Tachygram, value::Commitment);
-    type Output = Kind![Fp; OutputHeaderOutput<'_, _>];
+    type Output = Kind![Fp; OutputHeaderOutput<'_, _, EpAffine>];
 
     const SUFFIX: Suffix = Suffix::new(7);
 
@@ -65,7 +65,7 @@ impl Header<Fp> for OutputHeader {
                 allocator,
                 witness.as_ref().map(|fields| Fp::from(fields.1)),
             )?,
-            cv: ValueCommitment::alloc(dr, allocator, witness.as_ref().map(|fields| fields.2))?,
+            cv: Point::alloc(dr, witness.as_ref().map(|fields| EpAffine::from(fields.2)))?,
         })
     }
 }
@@ -140,23 +140,27 @@ impl Step<Pasta> for OutputBind {
         pad.clone().enforce_nonzero(dr)?;
         let blind_point =
             fixed_base::R_TABLE.mul_free(dr, &witness.as_ref().map(|data| Fq::from(data.1)))?;
-        let cv = fixed_base::NEG_V_TABLE.mul_bounded(dr, &amount, &blind_point)?;
-        let [cv_x, cv_y] = cv.each_ref().map(Element::value);
-        let output = D::try_just(|| {
-            let commitment = EpAffine::from_xy(*cv_x.take(), *cv_y.take()).ok_or_else(|| {
-                ragu_core::Error::InvalidWitness("OutputBind: cv is not on the curve".into())
-            })?;
-            Ok((
+        let walked = fixed_base::NEG_V_TABLE.mul_bounded(dr, &amount, &blind_point)?;
+        let [walked_x, walked_y] = walked.each_ref().map(Element::value);
+        let cv = Point::alloc(
+            dr,
+            D::try_just(|| {
+                EpAffine::from_xy(*walked_x.take(), *walked_y.take()).ok_or_else(|| {
+                    ragu_core::Error::InvalidWitness("OutputBind: cv is not on the curve".into())
+                })
+            })?,
+        )?;
+        for (coordinate, expected) in gadgets::coordinates(dr, &cv)?.iter().zip(&walked) {
+            coordinate.enforce_equal(dr, expected)?;
+        }
+        let output = D::just(|| {
+            (
                 Tachygram::from(*cm.value().take()),
                 Tachygram::from(*pad.value().take()),
-                value::Commitment::from(commitment),
-            ))
-        })?;
-        let fields = OutputHeaderOutput {
-            cm,
-            pad,
-            cv: ValueCommitment { coordinates: cv },
-        };
+                value::Commitment::from(cv.value().take()),
+            )
+        });
+        let fields = OutputHeaderOutput { cm, pad, cv };
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             output,

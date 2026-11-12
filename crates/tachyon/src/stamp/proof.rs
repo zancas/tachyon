@@ -1,7 +1,6 @@
 //! Tachyon proofs via Ragu PCD.
 //!
-//! Registers all PCD step types and provides accumulator helpers for
-//! stamp construction and verification.
+//! Registers all PCD step types.
 //!
 //! `Step::INDEX` runs from zero without gaps, and [`make_app`] registers the
 //! steps in that order; `ApplicationBuilder` rejects any other sequence.
@@ -29,43 +28,12 @@ pub mod summary;
 
 use lazy_static::lazy_static;
 use ragu::{Application, ApplicationBuilder, RegistryTags};
-use ragu_circuits::polynomials::ProductionRank;
-use ragu_core::{
-    drivers::{Driver, DriverValue},
-    gadgets::Gadget,
-    maybe::Maybe as _,
-    pasta::Pasta,
-};
-use ragu_primitives::{Element, allocator::Allocator, io::Write};
-use udon::curve::Affine as _;
+use ragu_circuits::{polynomials::ProductionRank, staging::wire_degree};
+use ragu_core::{Cycle as _, FixedGenerators as _, pasta::Pasta};
+use ragu_primitives::{ENDOSCALAR_BITS, ENDOSCALAR_PRODUCTS};
+use udon::curve::{Affine, Projective as _};
 
-use crate::{pasta, primitives::TachygramSetBridge, value};
-
-/// The affine coordinates of a value commitment `cv` on a header.
-#[derive(Gadget, Write)]
-pub struct ValueCommitment<'dr, D: Driver<'dr>> {
-    pub coordinates: [Element<'dr, D>; 2],
-}
-
-impl<'dr, D: Driver<'dr, F = pasta::Fp>> ValueCommitment<'dr, D> {
-    fn alloc<A: Allocator<'dr, D>>(
-        dr: &mut D,
-        allocator: &mut A,
-        cv: DriverValue<D, value::Commitment>,
-    ) -> ragu_core::Result<Self> {
-        let coordinates = D::try_just(|| {
-            pasta::EpAffine::from(cv.take())
-                .coordinates()
-                .ok_or_else(|| ragu_core::Error::InvalidWitness("cv is the identity".into()))
-        })?;
-        Ok(Self {
-            coordinates: [
-                Element::alloc(dr, allocator, coordinates.as_ref().map(|pair| pair.0))?,
-                Element::alloc(dr, allocator, coordinates.as_ref().map(|pair| pair.1))?,
-            ],
-        })
-    }
-}
+use crate::pasta;
 
 /// Eight payload elements for QR split/selection and bucket headers and one
 /// suffix element.
@@ -123,13 +91,32 @@ fn make_app() -> Result<Application<'static, Pasta, ProductionRank, HEADER_SIZE>
 }
 
 lazy_static! {
-    /// The empty stamp's bridge hash coordinates, fixed by the baked parameters
-    /// and production rank, independently of PCD setup.
+    /// The coordinates of the empty stamp's bridge hash: the bridge hash of
+    /// the constant-one commitment, fixed by the baked parameters and
+    /// production rank. Steps read it while the application registers them,
+    /// so it is computed without one.
     static ref EMPTY_STAMP_BRIDGE_HASH: [pasta::Fp; 2] = {
-        #[expect(clippy::expect_used, reason = "the fixed setup has finite bridge generators")]
-        let bridge_hash = TachygramSetBridge::empty().expect("valid constant-one bridge hash");
-        #[expect(clippy::expect_used, reason = "TachygramSetBridge::empty rejects the identity")]
-        let coordinates = pasta::EpAffine::from(bridge_hash)
+        let params = pasta::baked();
+        #[expect(clippy::expect_used, reason = "the fixed setup's first generator is finite")]
+        let (x, y) = Pasta::host_generators(params)
+            .g()
+            .first()
+            .and_then(Affine::coordinates)
+            .expect("constant-one commitment is finite");
+        // The bridge point follows the hoisted endoscalar's bits and products,
+        // starting at the next reserved gate (two stage wires per gate).
+        let first_wire = (ENDOSCALAR_BITS + ENDOSCALAR_PRODUCTS).next_multiple_of(2);
+        let generators = Pasta::nested_generators(params).g();
+        #[expect(clippy::expect_used, reason = "the production rank has both bridge generators")]
+        let [left, right] = [first_wire, first_wire + 1].map(|wire| {
+            generators
+                .get(wire_degree::<ProductionRank>(wire))
+                .expect("bridge generators exist at production rank")
+                .to_projective()
+        });
+        #[expect(clippy::expect_used, reason = "the fixed setup's bridge hash is finite")]
+        let coordinates = (left * x + right * y)
+            .to_affine()
             .coordinates()
             .expect("constant-one bridge hash is finite");
         coordinates.into()
