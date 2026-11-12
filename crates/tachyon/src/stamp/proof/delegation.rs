@@ -217,7 +217,11 @@ impl Step<Pasta> for NoteSeed {
             &mut (),
             witness.as_ref().map(|data| Fp::from(u64::from(data.0))),
         )?;
-        gadgets::range::Bounded::<D, 51>::at_most(dr, &value, MAX_MONEY)?;
+        // Both the value and MAX_MONEY - value fit 51 bits, so neither wraps.
+        let maximum = Element::constant(dr, Fp::from(MAX_MONEY));
+        let slack = maximum.sub(dr, &value);
+        gadgets::range::enforce_width::<D, 51>(dr, &value)?;
+        gadgets::range::enforce_width::<D, 51>(dr, &slack)?;
         let psi = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.1)))?;
         let rcm = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.2)))?;
         rcm.clone().enforce_nonzero(dr).map_err(|_err| {
@@ -354,7 +358,7 @@ impl Step<Pasta> for NullifierDerive {
         #[expect(clippy::expect_used, reason = "four is invertible in Fp")]
         let quarter = Fp::from(4).invert().expect("four is invertible");
         let group = epoch_start.scale(dr, Coeff::Arbitrary(quarter));
-        gadgets::range::Bounded::<D, 30>::new(dr, &group).map_err(|_err| {
+        gadgets::range::enforce_width::<D, 30>(dr, &group).map_err(|_err| {
             ragu_core::Error::InvalidWitness(
                 "NullifierDerive: epoch_start is not group-aligned".into(),
             )

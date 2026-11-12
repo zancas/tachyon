@@ -12,7 +12,7 @@ use ragu_primitives::{
 };
 use udon::field::Field as _;
 
-use super::range::Bounded;
+use super::range;
 use crate::{constants::EPOCH_MAX, pasta::Fp, primitives};
 
 /// A range-checked epoch index inside a circuit.
@@ -44,7 +44,7 @@ impl<'dr, D: Driver<'dr, F = Fp>> EpochIndex<'dr, D> {
         multipack(dr, &bits)?[0].enforce_equal(dr, epoch)?;
         let maximum = Element::constant(dr, Fp::from(u64::from(EPOCH_MAX)));
         let slack = maximum.sub(dr, epoch);
-        Bounded::<D, 32>::new(dr, &slack)?;
+        range::enforce_width::<D, 32>(dr, &slack)?;
         Ok(Self {
             element: epoch.clone(),
             position: [bits[0].clone(), bits[1].clone()],

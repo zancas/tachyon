@@ -116,9 +116,11 @@ impl Step<Pasta> for OutputBind {
                 .as_ref()
                 .map(|data| Fp::from(u64::from(data.0.value))),
         )?;
+        // With the 51-bit decomposition `mul_bounded` makes of the amount, this
+        // bounds the amount by MAX_MONEY.
         let bound = Element::constant(dr, Fp::from(MAX_MONEY));
         let slack = bound.sub(dr, &amount);
-        gadgets::range::Bounded::<D, 51>::new(dr, &slack)?;
+        gadgets::range::enforce_width::<D, 51>(dr, &slack)?;
         let rcm = Element::alloc(
             dr,
             &mut (),

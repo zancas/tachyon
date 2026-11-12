@@ -989,7 +989,7 @@ impl Step<Pasta> for QrSideDescend {
         }
         let depth_element = left_encoded.as_gadget().depth.clone();
         let profile_bits = left_encoded.as_gadget().bits.clone();
-        gadgets::range::Bounded::<D, 5>::new(dr, &depth_element).map_err(|_err| {
+        gadgets::range::enforce_width::<D, 5>(dr, &depth_element).map_err(|_err| {
             ragu_core::Error::InvalidWitness(
                 "QrSideDescend: profile has no bit left for another side".into(),
             )
