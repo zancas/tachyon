@@ -201,7 +201,7 @@ impl Window {
 /// A radix-8 table of $W$ windows for the base $B$ with correction $C$.
 pub(crate) struct Table<const W: usize> {
     // Native constant storage only. Circuit iteration is bounded by const W.
-    low: Vec<Window>,
+    interior: Vec<Window>,
     top: Window,
 }
 
@@ -214,13 +214,13 @@ impl<const W: usize> Table<W> {
         assert!(!base.is_identity(), "fixed bases must be nonidentity");
         let mut power = Fq::ONE;
         let mut offset = Fq::ZERO;
-        let mut low = Vec::with_capacity(W - 1);
+        let mut interior = Vec::with_capacity(W - 1);
         for _ in 1..W {
-            low.push(Window::new(&[2u64, 3, 4, 5, 6, 7, 8, 9].map(|digit| {
+            interior.push(Window::new(&[2u64, 3, 4, 5, 6, 7, 8, 9].map(|digit| {
                 (base * (Fq::from(digit) * power))
                     .to_affine()
                     .coordinates()
-                    .expect("every fixed low entry must be finite")
+                    .expect("every fixed interior entry must be finite")
             })));
             offset += Fq::from(2) * power;
             power *= Fq::from(8);
@@ -231,13 +231,13 @@ impl<const W: usize> Table<W> {
                 .coordinates()
                 .expect("every fixed top entry must be finite")
         }));
-        Self { low, top }
+        Self { interior, top }
     }
 
     /// Returns the interior prefix $A_{W-1}$ and the selected top entry.
     #[expect(
         clippy::indexing_slicing,
-        reason = "const assertions fix the bit count; new() constructs exactly W - 1 low windows"
+        reason = "const assertions fix the bit count; new() constructs exactly W - 1 interior windows"
     )]
     fn prefix_and_top<'dr, D: Driver<'dr, F = Fp>, const N: usize>(
         &self,
@@ -249,9 +249,9 @@ impl<const W: usize> Table<W> {
             assert!(N == 3 * W, "the bit width must match the fixed-base table");
         }
         let window = |index: usize| [&bits[3 * index], &bits[3 * index + 1], &bits[3 * index + 2]];
-        let mut prefix = self.low[0].select(dr, window(0))?;
+        let mut prefix = self.interior[0].select(dr, window(0))?;
         for index in 1..W - 1 {
-            let [x, y] = self.low[index].select(dr, window(index))?;
+            let [x, y] = self.interior[index].select(dr, window(index))?;
             // The offset bound leaves the entry's x distinct from the
             // prefix's on every Boolean assignment, so the slope gate alone
             // fixes the slope.
