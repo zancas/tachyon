@@ -152,13 +152,7 @@ fn derive_nullifier<'dr, D: Driver<'dr, F = Fp>>(
     let high = &bits[1];
     let twice_high = high.element().double(dr);
     let group = epoch.sub(dr, &low.element()).sub(dr, &twice_high);
-    let mut sponge = poseidon::with_sponge::nullifier_group(dr, master, &group)?;
-    let [first, second, third, fourth] = [
-        sponge.squeeze(dr)?,
-        sponge.squeeze(dr)?,
-        sponge.squeeze(dr)?,
-        sponge.squeeze(dr)?,
-    ];
+    let [first, second, third, fourth] = poseidon::circuit::nullifier_group(dr, master, &group)?;
     let lower = low.conditional_select(dr, &first, &second)?;
     let upper = low.conditional_select(dr, &third, &fourth)?;
     high.conditional_select(dr, &lower, &upper)

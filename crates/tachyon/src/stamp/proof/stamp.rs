@@ -278,11 +278,10 @@ impl Step<Pasta> for OutputAction {
         let cm_root = left_encoded.as_gadget().cm.clone();
         let pad_root = left_encoded.as_gadget().pad.clone();
         let theta = Element::alloc(dr, &mut (), witness.as_ref().map(|data| data.0.0))?;
-        let alpha = poseidon::with_sponge::alpha_output(dr, &theta, &cm_root)?.squeeze(dr)?;
+        let alpha = poseidon::circuit::alpha_output(dr, &theta, &cm_root)?;
         let [rk_x, rk_y] = fixed_base::G_TABLE.mul_canonical(dr, &alpha, None)?;
         let [cv_x, cv_y] = left_encoded.as_gadget().cv.coordinates.clone();
-        let action_root = poseidon::with_sponge::action_digest(dr, (&cv_x, &cv_y), (&rk_x, &rk_y))?
-            .squeeze(dr)?;
+        let action_root = poseidon::circuit::action_digest(dr, (&cv_x, &cv_y), (&rk_x, &rk_y))?;
         #[expect(clippy::indexing_slicing, reason = "framework enforces NUM_STAGED = 1")]
         let staged_root = &oracles.staged()[0];
         action_root.enforce_equal(dr, staged_root)?;
@@ -420,19 +419,17 @@ impl Step<Pasta> for SpendAction {
             witness.as_ref().map(|data| Fp::from(data.1.nk)),
         )?;
         let [ak_x, ak_y] = gadgets::coordinates(dr, &ak)?;
-        let derived_pk =
-            poseidon::with_sponge::payment_key(dr, (&ak_x, &ak_y), &nk)?.squeeze(dr)?;
+        let derived_pk = poseidon::circuit::payment_key(dr, (&ak_x, &ak_y), &nk)?;
         let pk = left_encoded.as_gadget().pk.clone();
         pk.enforce_equal(dr, &derived_pk).map_err(|_err| {
             ragu_core::Error::InvalidWitness("SpendAction: pak not related to note".into())
         })?;
         let cm = left_encoded.as_gadget().cm.clone();
         let theta = Element::alloc(dr, &mut (), witness.as_ref().map(|data| data.0.0))?;
-        let alpha = poseidon::with_sponge::alpha_spend(dr, &theta, &cm)?.squeeze(dr)?;
+        let alpha = poseidon::circuit::alpha_spend(dr, &theta, &cm)?;
         let [rk_x, rk_y] = fixed_base::G_TABLE.mul_canonical(dr, &alpha, Some(&[ak_x, ak_y]))?;
         let [cv_x, cv_y] = left_encoded.as_gadget().cv.coordinates.clone();
-        let action_root = poseidon::with_sponge::action_digest(dr, (&cv_x, &cv_y), (&rk_x, &rk_y))?
-            .squeeze(dr)?;
+        let action_root = poseidon::circuit::action_digest(dr, (&cv_x, &cv_y), (&rk_x, &rk_y))?;
         #[expect(clippy::indexing_slicing, reason = "framework enforces NUM_STAGED = 1")]
         let staged_root = &oracles.staged()[0];
         action_root.enforce_equal(dr, staged_root)?;
@@ -931,7 +928,7 @@ impl Step<Pasta> for FeeFuse {
             &mut (),
             witness.as_ref().map(|data| Fp::from(data.0.rcm)),
         )?;
-        let blind = poseidon::with_sponge::feemax_blind(dr, &pk, &psi, &rcm)?.squeeze(dr)?;
+        let blind = poseidon::circuit::feemax_blind(dr, &pk, &psi, &rcm)?;
         #[expect(clippy::indexing_slicing, reason = "framework enforces NUM_STAGED = 5")]
         for (index, actual) in [&pk, &psi, &rcm, &maximum, &fee].into_iter().enumerate() {
             actual.enforce_equal(dr, &oracles.staged()[index])?;
@@ -942,10 +939,8 @@ impl Step<Pasta> for FeeFuse {
             .map_err(|_err| {
                 ragu_core::Error::InvalidWitness("FeeFuse: maximum fee exceeds MAX_MONEY".into())
             })?;
-        let fee_digest =
-            poseidon::with_sponge::fee_digest(dr, (&cv_x, &cv_y), &fee)?.squeeze(dr)?;
-        let fee_change =
-            poseidon::with_sponge::note_commitment(dr, &rcm, &pk, &change, &psi)?.squeeze(dr)?;
+        let fee_digest = poseidon::circuit::fee_digest(dr, (&cv_x, &cv_y), &fee)?;
+        let fee_change = poseidon::circuit::note_commitment(dr, &rcm, &pk, &change, &psi)?;
         // A zero root leaves the set polynomial factor `(X - tg)` trivial.
         fee_change.clone().enforce_nonzero(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("FeeFuse: fee change note commitment is zero".into())
@@ -1066,17 +1061,15 @@ impl Step<Pasta> for FeeSeed {
             &mut (),
             witness.as_ref().map(|data| Fp::from(data.0.rcm)),
         )?;
-        let blind = poseidon::with_sponge::feemax_blind(dr, &pk, &psi, &rcm)?.squeeze(dr)?;
+        let blind = poseidon::circuit::feemax_blind(dr, &pk, &psi, &rcm)?;
         #[expect(clippy::indexing_slicing, reason = "framework enforces NUM_STAGED = 3")]
         for (index, actual) in [&pk, &psi, &rcm].into_iter().enumerate() {
             actual.enforce_equal(dr, &oracles.staged()[index])?;
         }
         let [cv_x, cv_y] = fixed_base::R_TABLE.mul_canonical(dr, &blind, None)?;
         let zero = Element::constant(dr, Fp::ZERO);
-        let fee_digest =
-            poseidon::with_sponge::fee_digest(dr, (&cv_x, &cv_y), &zero)?.squeeze(dr)?;
-        let fee_change =
-            poseidon::with_sponge::note_commitment(dr, &rcm, &pk, &zero, &psi)?.squeeze(dr)?;
+        let fee_digest = poseidon::circuit::fee_digest(dr, (&cv_x, &cv_y), &zero)?;
+        let fee_change = poseidon::circuit::note_commitment(dr, &rcm, &pk, &zero, &psi)?;
         // A zero root leaves the set polynomial factor `(X - tg)` trivial.
         fee_change.clone().enforce_nonzero(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("FeeSeed: fee change note commitment is zero".into())

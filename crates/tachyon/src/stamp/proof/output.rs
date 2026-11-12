@@ -154,10 +154,8 @@ impl Step<Pasta> for OutputBind {
             &mut (),
             witness.as_ref().map(|data| Fp::from(data.0.psi)),
         )?;
-        let cm =
-            poseidon::with_sponge::note_commitment(dr, &rcm, &pk, &amount, &psi)?.squeeze(dr)?;
-        let pad =
-            poseidon::with_sponge::pad_tachygram(dr, &rcm, &pk, &amount, &psi)?.squeeze(dr)?;
+        let cm = poseidon::circuit::note_commitment(dr, &rcm, &pk, &amount, &psi)?;
+        let pad = poseidon::circuit::pad_tachygram(dr, &rcm, &pk, &amount, &psi)?;
         cm.clone().enforce_nonzero(dr)?;
         pad.clone().enforce_nonzero(dr)?;
         let blind_point =

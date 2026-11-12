@@ -313,13 +313,12 @@ impl Step<Pasta> for AnchorSpanSeed {
         let epoch_element =
             Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.1)))?;
         super::enforce_stamp_domain(dr, &epoch_element, oracles.bridge_hash())?;
-        let anchor_element = poseidon::with_sponge::anchor_next_stamp(
+        let anchor_element = poseidon::circuit::anchor_next_stamp(
             dr,
             &previous,
             &epoch_element,
             oracles.bridge_hash(),
-        )?
-        .squeeze(dr)?;
+        )?;
         enforce_poly_roots(
             dr,
             oracles,

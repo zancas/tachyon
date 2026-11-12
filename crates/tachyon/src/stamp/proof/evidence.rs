@@ -42,22 +42,6 @@ use crate::{
     relations::enforce::enforce_poly_equal,
 };
 
-fn bucket_leaf<'dr, D: Driver<'dr, F = Fp>>(
-    dr: &mut D,
-    bucket: &QrBucketOutput<'dr, D>,
-) -> ragu_core::Result<Element<'dr, D>> {
-    poseidon::with_sponge::evidence_tree_leaf(
-        dr,
-        &bucket.epoch,
-        &bucket.anchor_start,
-        &bucket.anchor_next,
-        &bucket.discriminant,
-        (&bucket.depth, &bucket.bits),
-        &bucket.contents_hash,
-    )?
-    .squeeze(dr)
-}
-
 /// A Poseidon Merkle root over one network's sealed buckets.
 ///
 /// Every leaf under `root` is the [`poseidon::evidence_tree_leaf`] of a bucket
@@ -269,8 +253,30 @@ impl Step<Pasta> for EvidenceTreeLeafPair {
                 .enforce_equal(dr, right_element)
                 .map_err(|_err| ragu_core::Error::InvalidWitness(message.into()))?;
         }
-        let first = bucket_leaf(dr, left_encoded.as_gadget())?;
-        let second = bucket_leaf(dr, right_encoded.as_gadget())?;
+        let first = poseidon::circuit::evidence_tree_leaf(
+            dr,
+            &left_encoded.as_gadget().epoch,
+            &left_encoded.as_gadget().anchor_start,
+            &left_encoded.as_gadget().anchor_next,
+            &left_encoded.as_gadget().discriminant,
+            (
+                &left_encoded.as_gadget().depth,
+                &left_encoded.as_gadget().bits,
+            ),
+            &left_encoded.as_gadget().contents_hash,
+        )?;
+        let second = poseidon::circuit::evidence_tree_leaf(
+            dr,
+            &right_encoded.as_gadget().epoch,
+            &right_encoded.as_gadget().anchor_start,
+            &right_encoded.as_gadget().anchor_next,
+            &right_encoded.as_gadget().discriminant,
+            (
+                &right_encoded.as_gadget().depth,
+                &right_encoded.as_gadget().bits,
+            ),
+            &right_encoded.as_gadget().contents_hash,
+        )?;
         let output = D::just(|| {
             let (epoch, start, end, discriminant, ..) = left.take();
             (
@@ -470,7 +476,7 @@ impl Step<Pasta> for EvidenceTreeFuse {
             right_encoded.as_gadget().first.clone(),
             right_encoded.as_gadget().second.clone(),
         ];
-        let root = poseidon::with_sponge::evidence_tree_node(dr, &children)?.squeeze(dr)?;
+        let root = poseidon::circuit::evidence_tree_node(dr, &children)?;
         let output = D::just(|| {
             let (epoch, start, end, discriminant, ..) = left.take();
             (
@@ -546,7 +552,7 @@ impl Step<Pasta> for EvidenceTreeCap {
         let right_encoded = Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right)?;
         let root = left_encoded.as_gadget().root.clone();
         let children = array::from_fn::<_, EVIDENCE_TREE_ARITY, _>(|_| root.clone());
-        let raised = poseidon::with_sponge::evidence_tree_node(dr, &children)?.squeeze(dr)?;
+        let raised = poseidon::circuit::evidence_tree_node(dr, &children)?;
         let output = D::just(|| {
             let (epoch, anchor_start, anchor_next, discriminant, _) = left.take();
             (
@@ -670,7 +676,7 @@ impl Step<Pasta> for EvidenceTreeDescend {
                     witness.as_ref().map(|path| Fp::from(path.0[level].1[3])),
                 )?,
             ];
-            let hash = poseidon::with_sponge::evidence_tree_node(dr, &children)?.squeeze(dr)?;
+            let hash = poseidon::circuit::evidence_tree_node(dr, &children)?;
             node.enforce_equal(dr, &hash).map_err(|_err| {
                 ragu_core::Error::InvalidWitness(
                     "EvidenceTreeDescend: children do not hash to the node".into(),
@@ -833,7 +839,15 @@ impl Step<Pasta> for EvidenceTreeOpen {
             bits: profile[1].clone(),
             contents_hash,
         };
-        let computed = bucket_leaf(dr, &output_fields)?;
+        let computed = poseidon::circuit::evidence_tree_leaf(
+            dr,
+            &output_fields.epoch,
+            &output_fields.anchor_start,
+            &output_fields.anchor_next,
+            &output_fields.discriminant,
+            (&output_fields.depth, &output_fields.bits),
+            &output_fields.contents_hash,
+        )?;
         expected.enforce_equal(dr, &computed).map_err(|_err| {
             ragu_core::Error::InvalidWitness(
                 "EvidenceTreeOpen: witnessed bucket is not the tree's leaf".into(),
