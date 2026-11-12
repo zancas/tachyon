@@ -147,8 +147,14 @@ impl Step<Pasta> for SpendableInit {
         let right_encoded = Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right)?;
         let previous = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.0)))?;
         let epoch = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.2)))?;
-        super::EMPTY_STAMP_BRIDGE_HASH
-            .enforce_distinct(dr, oracles.bridge_hash())
+        let [empty_x, empty_y] =
+            super::EMPTY_STAMP_BRIDGE_HASH.map(|coordinate| Element::constant(dr, coordinate));
+        let equal_x = oracles.bridge_hash()[0].is_equal(dr, &mut (), &empty_x)?;
+        let equal_y = oracles.bridge_hash()[1].is_equal(dr, &mut (), &empty_y)?;
+        equal_x
+            .and(dr, &equal_y)?
+            .element()
+            .enforce_zero(dr)
             .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
         circuit::EpochIndex::new(dr, &epoch)?;
         // The anchor immediately after the creation stamp, computed in-circuit

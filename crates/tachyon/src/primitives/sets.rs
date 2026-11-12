@@ -6,8 +6,8 @@ use ragu_circuits::{
     polynomials::{ProductionRank, sparse::Polynomial},
     staging::wire_degree,
 };
-use ragu_core::{Cycle as _, FixedGenerators as _, drivers::Driver, pasta::Pasta};
-use ragu_primitives::{ENDOSCALAR_BITS, ENDOSCALAR_PRODUCTS, Element};
+use ragu_core::{Cycle as _, FixedGenerators as _, pasta::Pasta};
+use ragu_primitives::{ENDOSCALAR_BITS, ENDOSCALAR_PRODUCTS};
 use udon::curve::{Affine, Projective as _};
 
 use super::{ActionDigest, Anchor, Tachygram};
@@ -125,27 +125,6 @@ impl TachygramSetBridge {
                     "constant-one bridge hash is not on the curve".into(),
                 )
             })
-    }
-
-    /// Constrains the in-circuit bridge hash `coordinates` to differ from this
-    /// one.
-    ///
-    /// # Errors
-    ///
-    /// Fails when the coordinates equal this bridge hash.
-    pub(crate) fn enforce_distinct<'dr, D: Driver<'dr, F = Fp>>(
-        &self,
-        dr: &mut D,
-        coordinates: &[Element<'dr, D>; 2],
-    ) -> ragu_core::Result<()> {
-        let (x, y) = self.0.coordinates().ok_or_else(|| {
-            ragu_core::Error::Initialization("bridge hash is the identity".into())
-        })?;
-        let x_element = Element::constant(dr, x);
-        let y_element = Element::constant(dr, y);
-        let equal_x = coordinates[0].is_equal(dr, &mut (), &x_element)?;
-        let equal_y = coordinates[1].is_equal(dr, &mut (), &y_element)?;
-        equal_x.and(dr, &equal_y)?.element().enforce_zero(dr)
     }
 }
 

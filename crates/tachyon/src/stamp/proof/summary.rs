@@ -134,8 +134,14 @@ impl Step<Pasta> for SummarySeed {
         let previous = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.0)))?;
         let epoch_element =
             Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.1)))?;
-        super::EMPTY_STAMP_BRIDGE_HASH
-            .enforce_distinct(dr, oracles.bridge_hash())
+        let [empty_x, empty_y] =
+            super::EMPTY_STAMP_BRIDGE_HASH.map(|coordinate| Element::constant(dr, coordinate));
+        let equal_x = oracles.bridge_hash()[0].is_equal(dr, &mut (), &empty_x)?;
+        let equal_y = oracles.bridge_hash()[1].is_equal(dr, &mut (), &empty_y)?;
+        equal_x
+            .and(dr, &equal_y)?
+            .element()
+            .enforce_zero(dr)
             .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
         circuit::EpochIndex::new(dr, &epoch_element)?;
         let anchor = poseidon::circuit::anchor_next_stamp(
@@ -219,8 +225,14 @@ impl Step<Pasta> for SummaryAdvance {
             &Slot::output(0),
             "SummaryAdvance: extended accumulator must fold the stamp",
         )?;
-        super::EMPTY_STAMP_BRIDGE_HASH
-            .enforce_distinct(dr, oracles.bridge_hash())
+        let [empty_x, empty_y] =
+            super::EMPTY_STAMP_BRIDGE_HASH.map(|coordinate| Element::constant(dr, coordinate));
+        let equal_x = oracles.bridge_hash()[0].is_equal(dr, &mut (), &empty_x)?;
+        let equal_y = oracles.bridge_hash()[1].is_equal(dr, &mut (), &empty_y)?;
+        equal_x
+            .and(dr, &equal_y)?
+            .element()
+            .enforce_zero(dr)
             .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
         circuit::EpochIndex::new(dr, &left_encoded.as_gadget().epoch)?;
         let anchor = poseidon::circuit::anchor_next_stamp(

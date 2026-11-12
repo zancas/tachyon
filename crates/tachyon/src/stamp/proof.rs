@@ -123,10 +123,16 @@ fn make_app() -> Result<Application<'static, Pasta, ProductionRank, HEADER_SIZE>
 }
 
 lazy_static! {
-    /// Fixed by the baked parameters and production rank, independently of PCD setup.
-    static ref EMPTY_STAMP_BRIDGE_HASH: TachygramSetBridge = {
+    /// The empty stamp's bridge hash coordinates, fixed by the baked parameters
+    /// and production rank, independently of PCD setup.
+    static ref EMPTY_STAMP_BRIDGE_HASH: [pasta::Fp; 2] = {
         #[expect(clippy::expect_used, reason = "the fixed setup has finite bridge generators")]
-        TachygramSetBridge::empty().expect("valid constant-one bridge hash")
+        let bridge_hash = TachygramSetBridge::empty().expect("valid constant-one bridge hash");
+        #[expect(clippy::expect_used, reason = "TachygramSetBridge::empty rejects the identity")]
+        let coordinates = pasta::EpAffine::from(bridge_hash)
+            .coordinates()
+            .expect("constant-one bridge hash is finite");
+        coordinates.into()
     };
 
     /// A static ref to the mock ragu application.
