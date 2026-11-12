@@ -687,17 +687,8 @@ impl Step<Pasta> for QrIntakeSplit {
             let (epoch, anchor_prev, anchor_end, discriminant, profile) = left.take();
             let () = right.take();
             let [first, second] = non_residue_hash;
-            let bridge_hash =
-                EpAffine::from_xy(*first.take(), *second.take()).ok_or_else(|| {
-                    ragu_core::Error::InvalidWitness(
-                        "QrIntakeSplit: bridge hash is not on the curve".into(),
-                    )
-                })?;
-            if bridge_hash.is_identity() {
-                return Err(ragu_core::Error::InvalidWitness(
-                    "QrIntakeSplit: bridge hash is the identity".into(),
-                ));
-            }
+            let bridge_hash = TachygramSetBridge::try_from([*first.take(), *second.take()])
+                .map_err(|err| ragu_core::Error::InvalidWitness(err.into()))?;
             Ok((
                 (
                     epoch,
@@ -705,7 +696,7 @@ impl Step<Pasta> for QrIntakeSplit {
                     anchor_end,
                     discriminant,
                     profile,
-                    TachygramSetBridge::from(bridge_hash),
+                    bridge_hash,
                 ),
                 (),
             ))
@@ -1205,17 +1196,8 @@ impl Step<Pasta> for QrBucketSeal {
                 .bridge_hash()
                 .clone()
                 .map(|value| *value.value().take());
-            let contents_hash = EpAffine::from_xy(hash_x, hash_y).ok_or_else(|| {
-                ragu_core::Error::InvalidWitness(
-                    "QrBucketSeal: bridge hash is not on the curve".into(),
-                )
-            })?;
-            if contents_hash.is_identity() {
-                return Err(ragu_core::Error::InvalidWitness(
-                    "QrBucketSeal: bridge hash is the identity".into(),
-                ));
-            }
-
+            let contents_hash = TachygramSetBridge::try_from([hash_x, hash_y])
+                .map_err(|err| ragu_core::Error::InvalidWitness(err.into()))?;
             Ok((
                 (
                     epoch,
@@ -1223,7 +1205,7 @@ impl Step<Pasta> for QrBucketSeal {
                     Anchor::from(*crossing.value().take()),
                     discriminant,
                     profile,
-                    TachygramSetBridge::from(contents_hash),
+                    contents_hash,
                 ),
                 (),
             ))

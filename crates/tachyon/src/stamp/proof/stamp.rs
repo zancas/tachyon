@@ -75,7 +75,7 @@ impl Header<Fp> for Actions {
 
 /// Header for one or more fee-bearing lineages.
 ///
-/// O0/O1 hold the action and tachygram sets. `stamp_tg_commit` holds O1's
+/// O0/O1 hold the action and tachygram sets. `tachygram_set_bridge` holds O1's
 /// bridge hash. [`StampMerge`] enforces both output sets as input products.
 ///
 /// [`FeeFuse`] multiplies each set polynomial by a fee singleton set
@@ -92,11 +92,11 @@ pub struct Stamp;
 #[derive(Gadget, Write)]
 pub struct StampOutput<'dr, D: Driver<'dr>> {
     pub anchor: Element<'dr, D>,
-    pub stamp_tg_commit: [Element<'dr, D>; 2],
+    pub tachygram_set_bridge: [Element<'dr, D>; 2],
 }
 
 impl Header<Fp> for Stamp {
-    /// `(stamp_tg_commit, anchor)`
+    /// `(tachygram_set_bridge, anchor)`
     type Data = (TachygramSetBridge, Anchor);
     type Output = Kind![Fp; StampOutput<'_, _>];
 
@@ -111,7 +111,7 @@ impl Header<Fp> for Stamp {
             clippy::expect_used,
             reason = "a bridge hash is the identity only under a discrete-log relation between its generators"
         )]
-        let stamp_tg_commit = witness.as_ref().map(|fields| {
+        let tachygram_set_bridge = witness.as_ref().map(|fields| {
             EpAffine::from(fields.0)
                 .coordinates()
                 .expect("bridge hash is not the identity")
@@ -122,16 +122,20 @@ impl Header<Fp> for Stamp {
                 allocator,
                 witness.as_ref().map(|fields| Fp::from(fields.1)),
             )?,
-            stamp_tg_commit: [
+            tachygram_set_bridge: [
                 Element::alloc(
                     dr,
                     allocator,
-                    stamp_tg_commit.as_ref().map(|coordinates| coordinates.0),
+                    tachygram_set_bridge
+                        .as_ref()
+                        .map(|coordinates| coordinates.0),
                 )?,
                 Element::alloc(
                     dr,
                     allocator,
-                    stamp_tg_commit.as_ref().map(|coordinates| coordinates.1),
+                    tachygram_set_bridge
+                        .as_ref()
+                        .map(|coordinates| coordinates.1),
                 )?,
             ],
         })
@@ -494,12 +498,13 @@ impl Step<Pasta> for StampMerge {
         let [x, y] = oracles.bridge_hash().each_ref().map(Element::value);
         let anchor_value = left_anchor_element.value();
         let data = D::try_just(|| {
-            let bridge_hash = TachygramSetBridge::try_from([*x.take(), *y.take()])?;
+            let bridge_hash = TachygramSetBridge::try_from([*x.take(), *y.take()])
+                .map_err(|err| ragu_core::Error::InvalidWitness(err.into()))?;
             Ok((bridge_hash, Anchor::from(*anchor_value.take())))
         })?;
         let encoded = Encoded::from_gadget(StampOutput {
             anchor: left_anchor_element,
-            stamp_tg_commit: oracles.bridge_hash().clone(),
+            tachygram_set_bridge: oracles.bridge_hash().clone(),
         });
         Ok(((left_encoded, right_encoded, encoded), data, D::unit()))
     }
@@ -682,12 +687,13 @@ impl Step<Pasta> for StampLift {
         let [x, y] = oracles.bridge_hash().each_ref().map(Element::value);
         let anchor_value = anchor_end.value();
         let data = D::try_just(|| {
-            let bridge_hash = TachygramSetBridge::try_from([*x.take(), *y.take()])?;
+            let bridge_hash = TachygramSetBridge::try_from([*x.take(), *y.take()])
+                .map_err(|err| ragu_core::Error::InvalidWitness(err.into()))?;
             Ok((bridge_hash, Anchor::from(*anchor_value.take())))
         })?;
         let encoded = Encoded::from_gadget(StampOutput {
             anchor: anchor_end,
-            stamp_tg_commit: oracles.bridge_hash().clone(),
+            tachygram_set_bridge: oracles.bridge_hash().clone(),
         });
         Ok(((left_encoded, right_encoded, encoded), data, D::unit()))
     }
@@ -926,12 +932,13 @@ impl Step<Pasta> for FeeFuse {
         let [x, y] = oracles.bridge_hash().each_ref().map(Element::value);
         let anchor_value = anchor.value();
         let data = D::try_just(|| {
-            let bridge_hash = TachygramSetBridge::try_from([*x.take(), *y.take()])?;
+            let bridge_hash = TachygramSetBridge::try_from([*x.take(), *y.take()])
+                .map_err(|err| ragu_core::Error::InvalidWitness(err.into()))?;
             Ok((bridge_hash, Anchor::from(*anchor_value.take())))
         })?;
         let encoded = Encoded::from_gadget(StampOutput {
             anchor,
-            stamp_tg_commit: oracles.bridge_hash().clone(),
+            tachygram_set_bridge: oracles.bridge_hash().clone(),
         });
         Ok(((left_encoded, right_encoded, encoded), data, D::unit()))
     }
@@ -1058,12 +1065,13 @@ impl Step<Pasta> for FeeSeed {
         let [x, y] = oracles.bridge_hash().each_ref().map(Element::value);
         let anchor_value = anchor_element.value();
         let data = D::try_just(|| {
-            let bridge_hash = TachygramSetBridge::try_from([*x.take(), *y.take()])?;
+            let bridge_hash = TachygramSetBridge::try_from([*x.take(), *y.take()])
+                .map_err(|err| ragu_core::Error::InvalidWitness(err.into()))?;
             Ok((bridge_hash, Anchor::from(*anchor_value.take())))
         })?;
         let encoded = Encoded::from_gadget(StampOutput {
             anchor: anchor_element,
-            stamp_tg_commit: oracles.bridge_hash().clone(),
+            tachygram_set_bridge: oracles.bridge_hash().clone(),
         });
         Ok(((left_encoded, right_encoded, encoded), data, D::unit()))
     }
@@ -1179,12 +1187,13 @@ impl Step<Pasta> for StampUnmerge {
         let [x, y] = oracles.bridge_hash().each_ref().map(Element::value);
         let anchor_value = left_anchor_element.value();
         let data = D::try_just(|| {
-            let bridge_hash = TachygramSetBridge::try_from([*x.take(), *y.take()])?;
+            let bridge_hash = TachygramSetBridge::try_from([*x.take(), *y.take()])
+                .map_err(|err| ragu_core::Error::InvalidWitness(err.into()))?;
             Ok((bridge_hash, Anchor::from(*anchor_value.take())))
         })?;
         let encoded = Encoded::from_gadget(StampOutput {
             anchor: left_anchor_element,
-            stamp_tg_commit: oracles.bridge_hash().clone(),
+            tachygram_set_bridge: oracles.bridge_hash().clone(),
         });
         Ok(((left_encoded, right_encoded, encoded), data, D::unit()))
     }

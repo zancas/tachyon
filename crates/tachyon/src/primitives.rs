@@ -22,6 +22,6 @@ pub use qr::{
 pub use seq::{NfSeqCommit, NfSeqPoly};
 pub use sets::{
     ActionSetCommit, ActionSetPoly, AnchorSetCommit, AnchorSetPoly, TachygramSetBridge,
-    TachygramSetCommit, TachygramSetPoly,
+    TachygramSetBridgeError, TachygramSetCommit, TachygramSetPoly,
 };
 pub use tachygram::Tachygram;

@@ -1,7 +1,7 @@
 use core::iter;
 
 use corez::io::{self, Read, Write};
-use derive_more::{AsRef, Debug, Eq as TotalEq, From, Into, PartialEq};
+use derive_more::{AsRef, Debug, Display, Eq as TotalEq, Error, From, Into, PartialEq};
 use ragu_circuits::polynomials::{ProductionRank, sparse::Polynomial};
 use ragu_core::{Cycle as _, FixedGenerators as _, pasta::Pasta};
 use udon::curve::{Affine as _, Projective as _};
@@ -64,18 +64,25 @@ impl Default for TachygramSetCommit {
     }
 }
 
+/// Errors that can occur when reading a bridge hash from its coordinates.
+#[derive(Debug, Display, Error, PartialEq, TotalEq)]
+pub enum TachygramSetBridgeError {
+    /// The coordinates are not a point on the curve.
+    #[display("bridge hash is not on the curve")]
+    NotOnCurve,
+    /// The coordinates are `(0, 0)`, which encode the identity.
+    #[display("bridge hash is the identity")]
+    Identity,
+}
+
 impl TryFrom<[Fp; 2]> for TachygramSetBridge {
-    type Error = ragu_core::Error;
+    type Error = TachygramSetBridgeError;
 
     /// Reads a bridge hash from its affine coordinates.
-    fn try_from([x, y]: [Fp; 2]) -> ragu_core::Result<Self> {
-        let point = EpAffine::from_xy(x, y).ok_or_else(|| {
-            ragu_core::Error::InvalidWitness("bridge hash is not on the curve".into())
-        })?;
+    fn try_from([x, y]: [Fp; 2]) -> Result<Self, Self::Error> {
+        let point = EpAffine::from_xy(x, y).ok_or(TachygramSetBridgeError::NotOnCurve)?;
         if point.is_identity() {
-            return Err(ragu_core::Error::InvalidWitness(
-                "bridge hash is the identity".into(),
-            ));
+            return Err(TachygramSetBridgeError::Identity);
         }
         Ok(Self(point))
     }
@@ -210,3 +217,6 @@ impl FromIterator<Tachygram> for TachygramSetPoly {
         Self(multiset::encode(iter.into_iter().map(Fp::from)))
     }
 }
+
+#[cfg(test)]
+mod tests;
