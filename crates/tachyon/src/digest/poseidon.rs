@@ -27,10 +27,6 @@ fn hash<const L: usize>(domain: &[u8; 16], input: [Fp; L]) -> Fp {
     out
 }
 
-fn hash_n<const L: usize, const N: usize>(domain: &[u8; 16], input: [Fp; L]) -> [Fp; N] {
-    emulated::<L, N>(domain, input)
-}
-
 fn emulated<const L: usize, const N: usize>(domain: &[u8; 16], preimage: [Fp; L]) -> [Fp; N] {
     type Emu = Emulator<Wireless<Always<()>, Fp>>;
     let mut emu = Emu::execute();
@@ -172,14 +168,9 @@ const NULLIFIER_DOMAIN: &[u8; 16] = b"Tachyon-NfDerive";
 
 /// Derives the group of consecutive epoch nullifiers starting at the
 /// group-aligned epoch `epoch_start` from the note's master key.
-///
-/// # Panics
-///
-/// Panics if the sponge rejects an absorb or a squeeze. The emulator is
-/// native and the element count is fixed at `RATE`, so this is unreachable.
 #[must_use]
 pub fn nullifier_group(mk: Fp, epoch_start: Fp) -> [Fp; PoseidonFp::RATE] {
-    hash_n(NULLIFIER_DOMAIN, [mk, epoch_start])
+    emulated(NULLIFIER_DOMAIN, [mk, epoch_start])
 }
 
 const ANCHOR_STAMP_DOMAIN: &[u8; 16] = b"Tachyon-AnchorSt";
