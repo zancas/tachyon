@@ -802,7 +802,7 @@ impl Step<Pasta> for EvidenceTreeOpen {
         let contents_hash = oracles.bridge_hash().clone();
         let [hash_x, hash_y] = contents_hash.each_ref().map(Element::value);
         let output = D::try_just(|| {
-            let (carrier_profile, _) = witness.take();
+            let (bucket_profile, _) = witness.take();
             let (epoch, anchor_start, anchor_next, discriminant, _) = left.clone().take();
             let bridge_hash =
                 EpAffine::from_xy(*hash_x.take(), *hash_y.take()).ok_or_else(|| {
@@ -820,7 +820,7 @@ impl Step<Pasta> for EvidenceTreeOpen {
                 anchor_start,
                 anchor_next,
                 discriminant,
-                carrier_profile,
+                bucket_profile,
                 TachygramSetBridge::from(bridge_hash),
             ))
         })?;

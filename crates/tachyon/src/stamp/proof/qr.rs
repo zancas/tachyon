@@ -296,7 +296,7 @@ impl Step<Pasta> for QrSummaryIntake {
             Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.0)))?;
         let zero = Element::constant(dr, Fp::ZERO);
         let output = D::try_just(|| {
-            let (carrier_discriminant,) = witness.take();
+            let (intake_discriminant,) = witness.take();
             let (summary_epoch, summary_anchor_prev, summary_anchor_end) = left.take();
             let () = right.take();
             Ok((
@@ -304,7 +304,7 @@ impl Step<Pasta> for QrSummaryIntake {
                     summary_epoch,
                     summary_anchor_prev,
                     summary_anchor_end,
-                    carrier_discriminant,
+                    intake_discriminant,
                     QrProfile::ROOT,
                 ),
                 (),
