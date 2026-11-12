@@ -625,7 +625,7 @@ impl Step<Pasta> for UnspentLift {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded =
             Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right.clone())?;
-        let epoch_element = right_encoded.as_gadget().epoch.clone();
+        let epoch_element = right_encoded.as_gadget().network.epoch.clone();
         let checked_next =
             gadgets::epoch::EpochIndex::successor(dr, &epoch_element).map_err(|_err| {
                 ragu_core::Error::InvalidWitness("UnspentLift: bucket has no next epoch".into())
@@ -641,7 +641,7 @@ impl Step<Pasta> for UnspentLift {
                 )
             })?;
         let unspent_end = left_encoded.as_gadget().anchor_next.clone();
-        let bucket_start = right_encoded.as_gadget().anchor_start.clone();
+        let bucket_start = right_encoded.as_gadget().network.anchor_start.clone();
         unspent_end
             .enforce_equal(dr, &bucket_start)
             .map_err(|_err| {
@@ -657,7 +657,7 @@ impl Step<Pasta> for UnspentLift {
         right_encoded.as_gadget().profile.enforce_sides_of(
             dr,
             &value_element,
-            &right_encoded.as_gadget().discriminant,
+            &right_encoded.as_gadget().network.discriminant,
             witness.as_ref().map(|data| data.1),
             witness.as_ref().map(|data| data.2),
         )?;
@@ -701,7 +701,7 @@ impl Step<Pasta> for UnspentLift {
             anchor_start: left_encoded.as_gadget().anchor_start.clone(),
             epoch_start: left_encoded.as_gadget().epoch_start.clone(),
             epoch_next,
-            anchor_next: right_encoded.as_gadget().anchor_next.clone(),
+            anchor_next: right_encoded.as_gadget().network.anchor_next.clone(),
         };
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),

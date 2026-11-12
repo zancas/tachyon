@@ -58,10 +58,8 @@ pub struct EvidenceTree;
 
 #[derive(Gadget, Write)]
 pub struct EvidenceTreeOutput<'dr, D: Driver<'dr>> {
-    pub epoch: Element<'dr, D>,
-    pub anchor_start: Element<'dr, D>,
-    pub anchor_next: Element<'dr, D>,
-    pub discriminant: Element<'dr, D>,
+    #[ragu(gadget)]
+    pub network: gadgets::qr::QrNetwork<'dr, D>,
     pub root: Element<'dr, D>,
 }
 
@@ -78,25 +76,12 @@ impl Header<Fp> for EvidenceTree {
         witness: DriverValue<D, Self::Data>,
     ) -> ragu_core::Result<Bound<'dr, D, Self::Output>> {
         Ok(EvidenceTreeOutput {
-            epoch: Element::alloc(
+            network: gadgets::qr::QrNetwork::alloc(
                 dr,
                 allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.0)),
-            )?,
-            anchor_start: Element::alloc(
-                dr,
-                allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.1)),
-            )?,
-            anchor_next: Element::alloc(
-                dr,
-                allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.2)),
-            )?,
-            discriminant: Element::alloc(
-                dr,
-                allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.3)),
+                witness
+                    .as_ref()
+                    .map(|fields| (fields.0, fields.1, fields.2, fields.3)),
             )?,
             root: Element::alloc(
                 dr,
@@ -118,10 +103,8 @@ pub struct EvidenceTreePair;
 
 #[derive(Gadget, Write)]
 pub struct EvidenceTreePairOutput<'dr, D: Driver<'dr>> {
-    pub epoch: Element<'dr, D>,
-    pub anchor_start: Element<'dr, D>,
-    pub anchor_next: Element<'dr, D>,
-    pub discriminant: Element<'dr, D>,
+    #[ragu(gadget)]
+    pub network: gadgets::qr::QrNetwork<'dr, D>,
     pub first: Element<'dr, D>,
     pub second: Element<'dr, D>,
 }
@@ -146,25 +129,12 @@ impl Header<Fp> for EvidenceTreePair {
         witness: DriverValue<D, Self::Data>,
     ) -> ragu_core::Result<Bound<'dr, D, Self::Output>> {
         Ok(EvidenceTreePairOutput {
-            epoch: Element::alloc(
+            network: gadgets::qr::QrNetwork::alloc(
                 dr,
                 allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.0)),
-            )?,
-            anchor_start: Element::alloc(
-                dr,
-                allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.1)),
-            )?,
-            anchor_next: Element::alloc(
-                dr,
-                allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.2)),
-            )?,
-            discriminant: Element::alloc(
-                dr,
-                allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.3)),
+                witness
+                    .as_ref()
+                    .map(|fields| (fields.0, fields.1, fields.2, fields.3)),
             )?,
             first: Element::alloc(
                 dr,
@@ -190,9 +160,10 @@ impl Header<Fp> for EvidenceTreePair {
 /// # Soundness
 ///
 /// Each digest uses the contents hash certified by
-/// [`QrBucketSeal`](super::qr::QrBucketSeal) or [`EvidenceTreeOpen`]. The four
-/// equalities carry the network fields as [`EvidenceTreePairFuse`] does.
-/// The emitted pair holds two sealed buckets as leaves and claims nothing more.
+/// [`QrBucketSeal`](super::qr::QrBucketSeal) or [`EvidenceTreeOpen`]. The
+/// network equality carries the network fields as [`EvidenceTreePairFuse`]
+/// does. The emitted pair holds two sealed buckets as leaves and claims nothing
+/// more.
 #[derive(Debug)]
 pub struct EvidenceTreeLeafPair;
 
@@ -227,38 +198,21 @@ impl Step<Pasta> for EvidenceTreeLeafPair {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded =
             Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right.clone())?;
-        for (left_element, right_element, message) in [
-            (
-                &left_encoded.as_gadget().epoch,
-                &right_encoded.as_gadget().epoch,
-                "EvidenceTreeLeafPair: inputs cover different epochs",
-            ),
-            (
-                &left_encoded.as_gadget().anchor_start,
-                &right_encoded.as_gadget().anchor_start,
-                "EvidenceTreeLeafPair: inputs open at different anchors",
-            ),
-            (
-                &left_encoded.as_gadget().anchor_next,
-                &right_encoded.as_gadget().anchor_next,
-                "EvidenceTreeLeafPair: inputs close at different anchors",
-            ),
-            (
-                &left_encoded.as_gadget().discriminant,
-                &right_encoded.as_gadget().discriminant,
-                "EvidenceTreeLeafPair: inputs derive from different discriminants",
-            ),
-        ] {
-            left_element
-                .enforce_equal(dr, right_element)
-                .map_err(|_err| ragu_core::Error::InvalidWitness(message.into()))?;
-        }
+        left_encoded
+            .as_gadget()
+            .network
+            .enforce_equal(dr, &right_encoded.as_gadget().network)
+            .map_err(|_err| {
+                ragu_core::Error::InvalidWitness(
+                    "EvidenceTreeLeafPair: inputs belong to different networks".into(),
+                )
+            })?;
         let first = poseidon::circuit::evidence_tree_leaf(
             dr,
-            &left_encoded.as_gadget().epoch,
-            &left_encoded.as_gadget().anchor_start,
-            &left_encoded.as_gadget().anchor_next,
-            &left_encoded.as_gadget().discriminant,
+            &left_encoded.as_gadget().network.epoch,
+            &left_encoded.as_gadget().network.anchor_start,
+            &left_encoded.as_gadget().network.anchor_next,
+            &left_encoded.as_gadget().network.discriminant,
             (
                 &left_encoded.as_gadget().profile.depth,
                 &left_encoded.as_gadget().profile.bits,
@@ -267,10 +221,10 @@ impl Step<Pasta> for EvidenceTreeLeafPair {
         )?;
         let second = poseidon::circuit::evidence_tree_leaf(
             dr,
-            &right_encoded.as_gadget().epoch,
-            &right_encoded.as_gadget().anchor_start,
-            &right_encoded.as_gadget().anchor_next,
-            &right_encoded.as_gadget().discriminant,
+            &right_encoded.as_gadget().network.epoch,
+            &right_encoded.as_gadget().network.anchor_start,
+            &right_encoded.as_gadget().network.anchor_next,
+            &right_encoded.as_gadget().network.discriminant,
             (
                 &right_encoded.as_gadget().profile.depth,
                 &right_encoded.as_gadget().profile.bits,
@@ -289,10 +243,7 @@ impl Step<Pasta> for EvidenceTreeLeafPair {
             )
         });
         let fields = EvidenceTreePairOutput {
-            epoch: left_encoded.as_gadget().epoch.clone(),
-            anchor_start: left_encoded.as_gadget().anchor_start.clone(),
-            anchor_next: left_encoded.as_gadget().anchor_next.clone(),
-            discriminant: left_encoded.as_gadget().discriminant.clone(),
+            network: left_encoded.as_gadget().network.clone(),
             first,
             second,
         };
@@ -310,7 +261,7 @@ impl Step<Pasta> for EvidenceTreeLeafPair {
 ///
 /// # Soundness
 ///
-/// Both roots are threaded, and the four equalities make the emitted header's
+/// Both roots are threaded, and the network equality makes the emitted header's
 /// network fields true of every leaf beneath either input. The fields are
 /// checked equal because a consumer reads the extent off the tree, so a tree
 /// spanning more than its leaves do would let a bucket's exclusion cover folds
@@ -352,41 +303,21 @@ impl Step<Pasta> for EvidenceTreePairFuse {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded =
             Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right.clone())?;
-        for (left_element, right_element, message) in [
-            (
-                &left_encoded.as_gadget().epoch,
-                &right_encoded.as_gadget().epoch,
-                "EvidenceTreePairFuse: inputs cover different epochs",
-            ),
-            (
-                &left_encoded.as_gadget().anchor_start,
-                &right_encoded.as_gadget().anchor_start,
-                "EvidenceTreePairFuse: inputs open at different anchors",
-            ),
-            (
-                &left_encoded.as_gadget().anchor_next,
-                &right_encoded.as_gadget().anchor_next,
-                "EvidenceTreePairFuse: inputs close at different anchors",
-            ),
-            (
-                &left_encoded.as_gadget().discriminant,
-                &right_encoded.as_gadget().discriminant,
-                "EvidenceTreePairFuse: inputs derive from different discriminants",
-            ),
-        ] {
-            left_element
-                .enforce_equal(dr, right_element)
-                .map_err(|_err| ragu_core::Error::InvalidWitness(message.into()))?;
-        }
+        left_encoded
+            .as_gadget()
+            .network
+            .enforce_equal(dr, &right_encoded.as_gadget().network)
+            .map_err(|_err| {
+                ragu_core::Error::InvalidWitness(
+                    "EvidenceTreePairFuse: inputs belong to different networks".into(),
+                )
+            })?;
         let output = D::just(|| {
             let (epoch, start, end, discriminant, root) = left.take();
             (epoch, start, end, discriminant, root, right.take().4)
         });
         let fields = EvidenceTreePairOutput {
-            epoch: left_encoded.as_gadget().epoch.clone(),
-            anchor_start: left_encoded.as_gadget().anchor_start.clone(),
-            anchor_next: left_encoded.as_gadget().anchor_next.clone(),
-            discriminant: left_encoded.as_gadget().discriminant.clone(),
+            network: left_encoded.as_gadget().network.clone(),
             first: left_encoded.as_gadget().root.clone(),
             second: right_encoded.as_gadget().root.clone(),
         };
@@ -407,7 +338,7 @@ impl Step<Pasta> for EvidenceTreePairFuse {
 ///
 /// # Soundness
 ///
-/// All four roots are threaded, and the four equalities carry the network
+/// All four roots are threaded, and the network equality carries the network
 /// fields as [`EvidenceTreePairFuse`] does. Every leaf beneath the emitted root
 /// was beneath one of the four inputs, so the claim carries by induction.
 #[derive(Debug)]
@@ -444,32 +375,15 @@ impl Step<Pasta> for EvidenceTreeFuse {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded =
             Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right.clone())?;
-        for (left_element, right_element, message) in [
-            (
-                &left_encoded.as_gadget().epoch,
-                &right_encoded.as_gadget().epoch,
-                "EvidenceTreeFuse: inputs cover different epochs",
-            ),
-            (
-                &left_encoded.as_gadget().anchor_start,
-                &right_encoded.as_gadget().anchor_start,
-                "EvidenceTreeFuse: inputs open at different anchors",
-            ),
-            (
-                &left_encoded.as_gadget().anchor_next,
-                &right_encoded.as_gadget().anchor_next,
-                "EvidenceTreeFuse: inputs close at different anchors",
-            ),
-            (
-                &left_encoded.as_gadget().discriminant,
-                &right_encoded.as_gadget().discriminant,
-                "EvidenceTreeFuse: inputs derive from different discriminants",
-            ),
-        ] {
-            left_element
-                .enforce_equal(dr, right_element)
-                .map_err(|_err| ragu_core::Error::InvalidWitness(message.into()))?;
-        }
+        left_encoded
+            .as_gadget()
+            .network
+            .enforce_equal(dr, &right_encoded.as_gadget().network)
+            .map_err(|_err| {
+                ragu_core::Error::InvalidWitness(
+                    "EvidenceTreeFuse: inputs belong to different networks".into(),
+                )
+            })?;
         let children = [
             left_encoded.as_gadget().first.clone(),
             left_encoded.as_gadget().second.clone(),
@@ -488,10 +402,7 @@ impl Step<Pasta> for EvidenceTreeFuse {
             )
         });
         let fields = EvidenceTreeOutput {
-            epoch: left_encoded.as_gadget().epoch.clone(),
-            anchor_start: left_encoded.as_gadget().anchor_start.clone(),
-            anchor_next: left_encoded.as_gadget().anchor_next.clone(),
-            discriminant: left_encoded.as_gadget().discriminant.clone(),
+            network: left_encoded.as_gadget().network.clone(),
             root,
         };
         Ok((
@@ -564,10 +475,7 @@ impl Step<Pasta> for EvidenceTreeCap {
             )
         });
         let fields = EvidenceTreeOutput {
-            epoch: left_encoded.as_gadget().epoch.clone(),
-            anchor_start: left_encoded.as_gadget().anchor_start.clone(),
-            anchor_next: left_encoded.as_gadget().anchor_next.clone(),
-            discriminant: left_encoded.as_gadget().discriminant.clone(),
+            network: left_encoded.as_gadget().network.clone(),
             root: raised,
         };
         Ok((
@@ -698,10 +606,7 @@ impl Step<Pasta> for EvidenceTreeDescend {
             )
         });
         let fields = EvidenceTreeOutput {
-            epoch: left_encoded.as_gadget().epoch.clone(),
-            anchor_start: left_encoded.as_gadget().anchor_start.clone(),
-            anchor_next: left_encoded.as_gadget().anchor_next.clone(),
-            discriminant: left_encoded.as_gadget().discriminant.clone(),
+            network: left_encoded.as_gadget().network.clone(),
             root: node,
         };
         Ok((
@@ -781,78 +686,51 @@ impl Step<Pasta> for EvidenceTreeOpen {
     {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded = Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right)?;
-        let profile = [
-            Element::alloc(
+        let fields = QrBucketOutput {
+            network: left_encoded.as_gadget().network.clone(),
+            profile: gadgets::qr::QrProfile::alloc(
                 dr,
                 &mut (),
-                witness
-                    .as_ref()
-                    .map(|data| Fp::from(u64::from(data.0.depth))),
+                witness.as_ref().map(|data| data.0),
             )?,
-            Element::alloc(
-                dr,
-                &mut (),
-                witness
-                    .as_ref()
-                    .map(|data| Fp::from(u64::from(data.0.bits))),
-            )?,
-        ];
+            contents_hash: oracles.bridge_hash().clone(),
+        };
         enforce_poly_equal(dr, oracles, Slot::output(0), Slot::output(1))?;
-        let contents_hash = oracles.bridge_hash().clone();
-        let [hash_x, hash_y] = contents_hash.each_ref().map(Element::value);
+        let leaf = poseidon::circuit::evidence_tree_leaf(
+            dr,
+            &fields.network.epoch,
+            &fields.network.anchor_start,
+            &fields.network.anchor_next,
+            &fields.network.discriminant,
+            (&fields.profile.depth, &fields.profile.bits),
+            &fields.contents_hash,
+        )?;
+        left_encoded
+            .as_gadget()
+            .root
+            .enforce_equal(dr, &leaf)
+            .map_err(|_err| {
+                ragu_core::Error::InvalidWitness(
+                    "EvidenceTreeOpen: witnessed bucket is not the tree's leaf".into(),
+                )
+            })?;
+        let [hash_x, hash_y] = fields.contents_hash.each_ref().map(Element::value);
         let output = D::try_just(|| {
-            let (bucket_profile, _) = witness.take();
-            let (epoch, anchor_start, anchor_next, discriminant, _) = left.clone().take();
-            let bridge_hash = TachygramSetBridge::try_from([*hash_x.take(), *hash_y.take()])
+            let (profile, _) = witness.take();
+            let (epoch, anchor_start, anchor_next, discriminant, _) = left.take();
+            let contents_hash = TachygramSetBridge::try_from([*hash_x.take(), *hash_y.take()])
                 .map_err(|err| ragu_core::Error::InvalidWitness(err.into()))?;
             Ok((
                 epoch,
                 anchor_start,
                 anchor_next,
                 discriminant,
-                bucket_profile,
-                bridge_hash,
+                profile,
+                contents_hash,
             ))
         })?;
-        let expected = left_encoded.as_gadget().root.clone();
-        let fields = [
-            left_encoded.as_gadget().epoch.clone(),
-            left_encoded.as_gadget().anchor_start.clone(),
-            left_encoded.as_gadget().anchor_next.clone(),
-            left_encoded.as_gadget().discriminant.clone(),
-        ];
-        let output_fields = QrBucketOutput {
-            epoch: fields[0].clone(),
-            anchor_start: fields[1].clone(),
-            anchor_next: fields[2].clone(),
-            discriminant: fields[3].clone(),
-            profile: gadgets::qr::QrProfile {
-                depth: profile[0].clone(),
-                bits: profile[1].clone(),
-            },
-            contents_hash,
-        };
-        let computed = poseidon::circuit::evidence_tree_leaf(
-            dr,
-            &output_fields.epoch,
-            &output_fields.anchor_start,
-            &output_fields.anchor_next,
-            &output_fields.discriminant,
-            (&output_fields.profile.depth, &output_fields.profile.bits),
-            &output_fields.contents_hash,
-        )?;
-        expected.enforce_equal(dr, &computed).map_err(|_err| {
-            ragu_core::Error::InvalidWitness(
-                "EvidenceTreeOpen: witnessed bucket is not the tree's leaf".into(),
-            )
-        })?;
-
         Ok((
-            (
-                left_encoded,
-                right_encoded,
-                Encoded::from_gadget(output_fields),
-            ),
+            (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             output,
             D::unit(),
         ))

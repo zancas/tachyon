@@ -1012,10 +1012,8 @@ pub struct QrBucket;
 
 #[derive(Gadget, Write)]
 pub struct QrBucketOutput<'dr, D: Driver<'dr>> {
-    pub epoch: Element<'dr, D>,
-    pub anchor_start: Element<'dr, D>,
-    pub anchor_next: Element<'dr, D>,
-    pub discriminant: Element<'dr, D>,
+    #[ragu(gadget)]
+    pub network: gadgets::qr::QrNetwork<'dr, D>,
     #[ragu(gadget)]
     pub profile: gadgets::qr::QrProfile<'dr, D>,
     pub contents_hash: [Element<'dr, D>; 2],
@@ -1051,25 +1049,12 @@ impl Header<Fp> for QrBucket {
                 .expect("bridge hash is not the identity")
         });
         Ok(QrBucketOutput {
-            epoch: Element::alloc(
+            network: gadgets::qr::QrNetwork::alloc(
                 dr,
                 allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.0)),
-            )?,
-            anchor_start: Element::alloc(
-                dr,
-                allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.1)),
-            )?,
-            anchor_next: Element::alloc(
-                dr,
-                allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.2)),
-            )?,
-            discriminant: Element::alloc(
-                dr,
-                allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.3)),
+                witness
+                    .as_ref()
+                    .map(|fields| (fields.0, fields.1, fields.2, fields.3)),
             )?,
             profile: gadgets::qr::QrProfile::alloc(
                 dr,
@@ -1210,10 +1195,12 @@ impl Step<Pasta> for QrBucketSeal {
         })?;
         let (data, aux) = output.cast();
         let fields = QrBucketOutput {
-            epoch: left_encoded.as_gadget().epoch.clone(),
-            anchor_start: left_encoded.as_gadget().anchor_prev.clone(),
-            anchor_next: crossing,
-            discriminant: left_encoded.as_gadget().discriminant.clone(),
+            network: gadgets::qr::QrNetwork {
+                epoch: left_encoded.as_gadget().epoch.clone(),
+                anchor_start: left_encoded.as_gadget().anchor_prev.clone(),
+                anchor_next: crossing,
+                discriminant: left_encoded.as_gadget().discriminant.clone(),
+            },
             profile: left_encoded.as_gadget().profile.clone(),
             contents_hash: oracles.bridge_hash().clone(),
         };
@@ -1355,17 +1342,17 @@ impl Step<Pasta> for QrUnspentInit {
         left_encoded.as_gadget().profile.enforce_sides_of(
             dr,
             &value_element,
-            &left_encoded.as_gadget().discriminant,
+            &left_encoded.as_gadget().network.discriminant,
             witness.as_ref().map(|data| data.1),
             witness.as_ref().map(|data| data.2),
         )?;
-        let checked_next = gadgets::epoch::EpochIndex::successor(
-            dr,
-            &left_encoded.as_gadget().epoch,
-        )
-        .map_err(|_err| {
-            ragu_core::Error::InvalidWitness("QrUnspentInit: bucket has no next epoch".into())
-        })?;
+        let checked_next =
+            gadgets::epoch::EpochIndex::successor(dr, &left_encoded.as_gadget().network.epoch)
+                .map_err(|_err| {
+                    ragu_core::Error::InvalidWitness(
+                        "QrUnspentInit: bucket has no next epoch".into(),
+                    )
+                })?;
         let next_value = checked_next.value()?;
         let epoch_next = checked_next.into_element();
         #[expect(
@@ -1403,10 +1390,10 @@ impl Step<Pasta> for QrUnspentInit {
             )
         });
         let fields = ArbitraryUnspentOutput {
-            anchor_start: left_encoded.as_gadget().anchor_start.clone(),
-            epoch_start: left_encoded.as_gadget().epoch.clone(),
+            anchor_start: left_encoded.as_gadget().network.anchor_start.clone(),
+            epoch_start: left_encoded.as_gadget().network.epoch.clone(),
             epoch_next,
-            anchor_next: left_encoded.as_gadget().anchor_next.clone(),
+            anchor_next: left_encoded.as_gadget().network.anchor_next.clone(),
         };
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
