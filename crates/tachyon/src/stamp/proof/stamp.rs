@@ -34,7 +34,7 @@ use crate::{
     keys::{ProofAuthorizingKey, private},
     note::{self, Note},
     pasta::{EpAffine, Fp, Fq},
-    primitives::{ActionDigest, Anchor, TachygramSetBridge, TachygramSetCommit, effect},
+    primitives::{ActionDigest, Anchor, TachygramSetBridge, effect},
     relations::enforce::{enforce_poly_equal, enforce_poly_product, enforce_poly_roots},
     value,
 };
@@ -145,18 +145,6 @@ impl Header<Fp> for Stamp {
 }
 
 impl Stamp {
-    /// Reconstructs the header from the public tachygram commitment and anchor.
-    ///
-    /// # Errors
-    ///
-    /// Fails if the commitment is the identity.
-    pub fn header(
-        commitment: TachygramSetCommit,
-        anchor: Anchor,
-    ) -> ragu_core::Result<(TachygramSetBridge, Anchor)> {
-        Ok((commitment.bridge()?, anchor))
-    }
-
     #[expect(
         clippy::type_complexity,
         reason = "the encoded header and its carried data"
