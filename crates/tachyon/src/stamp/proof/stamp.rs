@@ -15,13 +15,7 @@ use ragu_core::{
     maybe::Maybe as _,
     pasta::Pasta,
 };
-use ragu_primitives::{
-    Boolean, Element, GadgetExt as _, Point,
-    allocator::Allocator,
-    io::Write,
-    multipack,
-    vec::{ConstLen, FixedVec},
-};
+use ragu_primitives::{Element, GadgetExt as _, Point, allocator::Allocator, io::Write};
 use udon::{curve::Affine as _, field::Field as _};
 
 use super::{output::OutputHeader, pool::AnchorSpan, spend::SpendHeader};
@@ -30,7 +24,7 @@ use crate::{
     constants::{MAX_MONEY, orchard},
     digest::poseidon,
     entropy::ActionEntropy,
-    gadgets::{self, fixed_base},
+    gadgets::{self, arithmetic as circuit, fixed_base},
     keys::{ProofAuthorizingKey, private},
     note::{self, Note},
     pasta::{EpAffine, Fp, Fq},
@@ -864,24 +858,12 @@ impl Step<Pasta> for FeeFuse {
         // Their integer sum is below p, excluding field wraparound and proving
         // 0 <= fee <= maximum <= MAX_MONEY.
         let change = maximum.sub(dr, &fee);
-        #[expect(clippy::indexing_slicing, reason = "fixed 51-bit decompositions")]
-        for (amount, error) in [
-            (&fee, "FeeFuse: fee is out of range"),
-            (&change, "FeeFuse: change is out of range"),
-        ] {
-            let bits = FixedVec::<_, ConstLen<51>>::try_from_fn(|index| {
-                Boolean::alloc(
-                    dr,
-                    &mut (),
-                    amount
-                        .value()
-                        .map(|candidate| candidate.to_le_bits().as_ref()[index]),
-                )
-            })?;
-            multipack(dr, &bits)?[0]
-                .enforce_equal(dr, amount)
-                .map_err(|_err| ragu_core::Error::InvalidWitness(error.into()))?;
-        }
+        circuit::Bounded::<D, 51>::new(dr, &fee).map_err(|_err| {
+            ragu_core::Error::InvalidWitness("FeeFuse: fee is out of range".into())
+        })?;
+        circuit::Bounded::<D, 51>::new(dr, &change).map_err(|_err| {
+            ragu_core::Error::InvalidWitness("FeeFuse: change is out of range".into())
+        })?;
         let bound = Element::constant(dr, Fp::from(MAX_MONEY));
         let slack = bound.sub(dr, &maximum);
         let pk = Element::alloc(

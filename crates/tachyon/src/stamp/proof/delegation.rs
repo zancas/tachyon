@@ -223,22 +223,7 @@ impl Step<Pasta> for NoteSeed {
             &mut (),
             witness.as_ref().map(|data| Fp::from(u64::from(data.0))),
         )?;
-        // Both the value and MAX_MONEY - value fit 51 bits, so neither wraps.
-        let maximum = Element::constant(dr, Fp::from(MAX_MONEY));
-        let slack = maximum.sub(dr, &value);
-        #[expect(clippy::indexing_slicing, reason = "fixed 51-bit decompositions")]
-        for amount in [&value, &slack] {
-            let bits = FixedVec::<_, ConstLen<51>>::try_from_fn(|index| {
-                Boolean::alloc(
-                    dr,
-                    &mut (),
-                    amount
-                        .value()
-                        .map(|candidate| candidate.to_le_bits().as_ref()[index]),
-                )
-            })?;
-            multipack(dr, &bits)?[0].enforce_equal(dr, amount)?;
-        }
+        circuit::Bounded::<D, 51>::at_most(dr, &value, MAX_MONEY)?;
         let psi = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.1)))?;
         let rcm = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.2)))?;
         rcm.clone().enforce_nonzero(dr).map_err(|_err| {

@@ -12,14 +12,8 @@ use ragu_core::{
     maybe::Maybe as _,
     pasta::Pasta,
 };
-use ragu_primitives::{
-    Boolean, Element, GadgetExt as _,
-    allocator::Allocator,
-    io::Write,
-    multipack,
-    vec::{ConstLen, FixedVec},
-};
-use udon::{curve::Affine as _, field::Field as _};
+use ragu_primitives::{Element, GadgetExt as _, allocator::Allocator, io::Write};
+use udon::curve::Affine as _;
 
 use super::{ValueCommitment, delegation::NoteSecret, spendable::NoteSpendable};
 use crate::{
@@ -169,21 +163,7 @@ impl Step<Pasta> for SpendBind {
         let value = right_encoded.as_gadget().value.clone();
         let bound = Element::constant(dr, Fp::from(MAX_MONEY));
         let slack = bound.sub(dr, &value);
-        #[expect(clippy::indexing_slicing, reason = "fixed 51-bit decomposition")]
-        let slack_bits = FixedVec::<_, ConstLen<51>>::try_from_fn(|index| {
-            Boolean::alloc(
-                dr,
-                &mut (),
-                slack
-                    .value()
-                    .map(|candidate| candidate.to_le_bits().as_ref()[index]),
-            )
-        })?;
-        #[expect(
-            clippy::indexing_slicing,
-            reason = "multipack packs 51 bits into one chunk"
-        )]
-        multipack(dr, &slack_bits)?[0].enforce_equal(dr, &slack)?;
+        circuit::Bounded::<D, 51>::new(dr, &slack)?;
         let current = circuit::EpochIndex::new(dr, &left_encoded.as_gadget().epoch_current)?;
         let next = current.next(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("SpendBind: no epoch follows the spend epoch".into())
