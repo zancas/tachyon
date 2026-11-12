@@ -245,8 +245,8 @@ impl Step<Pasta> for EvidenceTreeLeafPair {
                 "EvidenceTreeLeafPair: inputs close at different anchors",
             ),
             (
-                &left_encoded.as_gadget().profile.discriminant,
-                &right_encoded.as_gadget().profile.discriminant,
+                &left_encoded.as_gadget().discriminant,
+                &right_encoded.as_gadget().discriminant,
                 "EvidenceTreeLeafPair: inputs derive from different discriminants",
             ),
         ] {
@@ -259,7 +259,7 @@ impl Step<Pasta> for EvidenceTreeLeafPair {
             &left_encoded.as_gadget().epoch,
             &left_encoded.as_gadget().anchor_start,
             &left_encoded.as_gadget().anchor_next,
-            &left_encoded.as_gadget().profile.discriminant,
+            &left_encoded.as_gadget().discriminant,
             (
                 &left_encoded.as_gadget().profile.depth,
                 &left_encoded.as_gadget().profile.bits,
@@ -271,7 +271,7 @@ impl Step<Pasta> for EvidenceTreeLeafPair {
             &right_encoded.as_gadget().epoch,
             &right_encoded.as_gadget().anchor_start,
             &right_encoded.as_gadget().anchor_next,
-            &right_encoded.as_gadget().profile.discriminant,
+            &right_encoded.as_gadget().discriminant,
             (
                 &right_encoded.as_gadget().profile.depth,
                 &right_encoded.as_gadget().profile.bits,
@@ -293,7 +293,7 @@ impl Step<Pasta> for EvidenceTreeLeafPair {
             epoch: left_encoded.as_gadget().epoch.clone(),
             anchor_start: left_encoded.as_gadget().anchor_start.clone(),
             anchor_next: left_encoded.as_gadget().anchor_next.clone(),
-            discriminant: left_encoded.as_gadget().profile.discriminant.clone(),
+            discriminant: left_encoded.as_gadget().discriminant.clone(),
             first,
             second,
         };
@@ -835,8 +835,8 @@ impl Step<Pasta> for EvidenceTreeOpen {
             epoch: fields[0].clone(),
             anchor_start: fields[1].clone(),
             anchor_next: fields[2].clone(),
+            discriminant: fields[3].clone(),
             profile: gadgets::qr::QrProfile {
-                discriminant: fields[3].clone(),
                 depth: profile[0].clone(),
                 bits: profile[1].clone(),
             },
@@ -847,7 +847,7 @@ impl Step<Pasta> for EvidenceTreeOpen {
             &output_fields.epoch,
             &output_fields.anchor_start,
             &output_fields.anchor_next,
-            &output_fields.profile.discriminant,
+            &output_fields.discriminant,
             (&output_fields.profile.depth, &output_fields.profile.bits),
             &output_fields.contents_hash,
         )?;

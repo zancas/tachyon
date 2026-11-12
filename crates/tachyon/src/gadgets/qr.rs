@@ -6,7 +6,7 @@ use ragu_core::{
     gadgets::Gadget,
     maybe::Maybe as _,
 };
-use ragu_primitives::{Boolean, Element, GadgetExt as _, io::Write};
+use ragu_primitives::{Boolean, Element, GadgetExt as _, allocator::Allocator, io::Write};
 use udon::field::Field as _;
 
 use crate::{
@@ -15,20 +15,49 @@ use crate::{
     primitives::{self, QrClassRoot},
 };
 
-/// A bucket's QR profile inside a circuit: the discriminant its progression
-/// starts at, the number of sides taken, and those sides as bits.
+/// A [`QrProfile`](primitives::QrProfile) inside a circuit: the number of
+/// sides taken and those sides as bits.
 #[derive(Gadget, Write)]
 #[expect(
     missing_debug_implementations,
     reason = "a gadget holds driver wires, like the header gadgets it sits in"
 )]
 pub struct QrProfile<'dr, D: Driver<'dr>> {
-    pub discriminant: Element<'dr, D>,
     pub depth: Element<'dr, D>,
     pub bits: Element<'dr, D>,
 }
 
 impl<'dr, D: Driver<'dr, F = Fp>> QrProfile<'dr, D> {
+    /// Allocates a header's profile.
+    pub(crate) fn alloc<A: Allocator<'dr, D>>(
+        dr: &mut D,
+        allocator: &mut A,
+        profile: DriverValue<D, primitives::QrProfile>,
+    ) -> Result<Self> {
+        Ok(Self {
+            depth: Element::alloc(
+                dr,
+                allocator,
+                profile
+                    .as_ref()
+                    .map(|value| Fp::from(u64::from(value.depth))),
+            )?,
+            bits: Element::alloc(
+                dr,
+                allocator,
+                profile.map(|value| Fp::from(u64::from(value.bits))),
+            )?,
+        })
+    }
+
+    /// The depth-zero profile, as constants.
+    pub(crate) fn root(dr: &mut D) -> Self {
+        Self {
+            depth: Element::constant(dr, Fp::from(u64::from(primitives::QrProfile::ROOT.depth))),
+            bits: Element::constant(dr, Fp::from(u64::from(primitives::QrProfile::ROOT.bits))),
+        }
+    }
+
     /// Proves that `value`'s first `depth` QR sides are this profile's bits.
     ///
     /// At each discriminant $d_i$ of the progression from `discriminant`, the
@@ -41,10 +70,11 @@ impl<'dr, D: Driver<'dr, F = Fp>> QrProfile<'dr, D> {
         &self,
         dr: &mut D,
         value: &Element<'dr, D>,
+        discriminant: &Element<'dr, D>,
         classes: DriverValue<D, [QrClassRoot; primitives::QrProfile::MAX_DEPTH]>,
         mask: DriverValue<D, [bool; primitives::QrProfile::MAX_DEPTH]>,
     ) -> Result<()> {
-        let mut shifted = value.add(dr, &self.discriminant);
+        let mut shifted = value.add(dr, discriminant);
         let mut depth_acc = Element::constant(dr, Fp::ZERO);
         let mut index_acc = Element::constant(dr, Fp::ZERO);
         let mut bits_acc = Element::constant(dr, Fp::ZERO);

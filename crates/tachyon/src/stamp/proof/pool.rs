@@ -658,6 +658,7 @@ impl Step<Pasta> for UnspentLift {
         right_encoded.as_gadget().profile.enforce_sides_of(
             dr,
             &value_element,
+            &right_encoded.as_gadget().discriminant,
             witness.as_ref().map(|data| data.1),
             witness.as_ref().map(|data| data.2),
         )?;
