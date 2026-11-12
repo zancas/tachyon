@@ -1,5 +1,3 @@
-#![allow(clippy::min_ident_chars, reason = "test code")]
-
 use super::*;
 use crate::primitives::TachygramSetCommit;
 

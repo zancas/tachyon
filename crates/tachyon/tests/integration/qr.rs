@@ -1728,14 +1728,10 @@ fn unspent_lift_rejects_invalid_extensions() {
     let first = epoch_bucket(rng, &pool, epoch0);
     let segment = qr_bucket_segment(rng, &first, nf);
     let bucket = epoch_bucket(rng, &pool, epoch1);
-    let detached_previous = Anchor::from(Fp::from(42));
+    let detached_previous = Anchor::random(rng);
     let detached_entry = detached_previous.next_epoch(epoch1).unwrap();
-    let detached_intake = seed_qr_empty_intake(
-        rng,
-        detached_entry,
-        epoch1,
-        QrDiscriminant::from(Fp::from(17)),
-    );
+    let detached_discriminant = QrDiscriminant::random(rng);
+    let detached_intake = seed_qr_empty_intake(rng, detached_entry, epoch1, detached_discriminant);
     let detached = seal_qr_intake(rng, detached_intake, detached_previous);
     let honest = witness::unspent_lift((*segment.data(), *bucket.pcd.data()), nf1.into(), &[nf0]);
     let (_, _, _, discriminant, ..) = *bucket.pcd.data();

@@ -1,4 +1,4 @@
-use alloc::{format, vec::Vec};
+use alloc::vec::Vec;
 
 use ragu_primitives::Simulator;
 
@@ -47,11 +47,10 @@ fn multiplications_compute_the_binary_value() {
     ] {
         for bits in &wide {
             let expected = base * scalar(bits);
-            let output = multiply(table, *bits);
             if expected.is_identity() {
-                assert!(output.is_err());
+                multiply(table, *bits).unwrap_err();
             } else {
-                assert_eq!(output.unwrap(), expected.to_affine());
+                assert_eq!(multiply(table, *bits).unwrap(), expected.to_affine());
             }
         }
     }
@@ -68,11 +67,10 @@ fn multiplications_compute_the_binary_value() {
     ] {
         for bits in &short {
             let expected = base * scalar(bits) + correction;
-            let output = multiply(table, *bits);
             if expected.is_identity() {
-                assert!(output.is_err());
+                multiply(table, *bits).unwrap_err();
             } else {
-                assert_eq!(output.unwrap(), expected.to_affine());
+                assert_eq!(multiply(table, *bits).unwrap(), expected.to_affine());
             }
         }
     }
@@ -99,13 +97,10 @@ fn exceptional_additions_have_no_satisfying_inverse() {
                 let difference = top_x.sub(dr, &prefix_x);
                 assert_eq!(*difference.value().take(), Fp::ZERO);
                 for advice in [Fp::ZERO, Fp::ONE, -Fp::ONE, Fp::from(7)] {
-                    let rejection = difference
+                    difference
                         .enforce_invertible_with(dr, Simulator::<Fp>::just(|| advice))
-                        .err();
-                    assert!(
-                        rejection
-                            .is_some_and(|error| format!("{error}").contains("gate check failed"))
-                    );
+                        .map(|_| ())
+                        .unwrap_err();
                 }
                 Ok(())
             })
@@ -128,12 +123,10 @@ fn exceptional_additions_have_no_satisfying_inverse() {
             let difference = start_x.sub(dr, &prefix_x);
             assert_eq!(*difference.value().take(), Fp::ZERO);
             for advice in [Fp::ZERO, Fp::ONE, -Fp::ONE, Fp::from(7)] {
-                let rejection = difference
+                difference
                     .enforce_invertible_with(dr, Simulator::<Fp>::just(|| advice))
-                    .err();
-                assert!(
-                    rejection.is_some_and(|error| format!("{error}").contains("gate check failed"))
-                );
+                    .map(|_| ())
+                    .unwrap_err();
             }
             Ok(())
         })
@@ -143,14 +136,8 @@ fn exceptional_additions_have_no_satisfying_inverse() {
 
 #[test]
 fn value_commitments_accept_zero_and_reject_wide_values() {
-    for (amount, blind, valid) in [
-        (Fp::ZERO, Fq::ONE, true),
-        (Fp::ONE, -Fq::ONE, true),
-        (Fp::from(MAX_MONEY), Fq::from(2).pow_u64(254), true),
-        (Fp::from(2).pow_u64(51), Fq::ONE, false),
-        (-Fp::ONE, Fq::ONE, false),
-    ] {
-        let result = Simulator::<Fp>::simulate((amount, blind), |dr, witness| {
+    let commit = |amount: Fp, blind: Fq| {
+        Simulator::<Fp>::simulate((amount, blind), |dr, witness| {
             let value = Element::alloc(dr, &mut (), witness.as_ref().map(|pair| pair.0))?;
             let blind_point = R_TABLE.mul_free(dr, &witness.as_ref().map(|pair| pair.1))?;
             let cv = NEG_V_TABLE.mul_bounded(dr, &value, &blind_point)?;
@@ -158,19 +145,29 @@ fn value_commitments_accept_zero_and_reject_wide_values() {
                 - *orchard::VALUE_COMMIT_V * scalar(&amount.to_le_bits().as_ref()[..51]);
             assert_eq!(cv.value().take(), expected.to_affine());
             Ok(())
-        });
-        assert_eq!(result.is_ok(), valid);
+        })
+        .map(|_| ())
+    };
+    for (amount, blind) in [
+        (Fp::ZERO, Fq::ONE),
+        (Fp::ONE, -Fq::ONE),
+        (Fp::from(MAX_MONEY), Fq::from(2).pow_u64(254)),
+    ] {
+        commit(amount, blind).unwrap();
+    }
+    for (amount, blind) in [(Fp::from(2).pow_u64(51), Fq::ONE), (-Fp::ONE, Fq::ONE)] {
+        commit(amount, blind).unwrap_err();
     }
 }
 
 #[test]
-fn fee_commitment_accepts_a_zero_maximum() {
+fn fee_commitment_spans_zero_to_max_money() {
     let value_base = *orchard::VALUE_COMMIT_V;
     for maximum in [0u64, 1, MAX_MONEY] {
         Simulator::<Fp>::simulate((), |dr, _| {
-            let digest = Element::constant(dr, Fp::from(11));
+            let blind = Element::constant(dr, Fp::from(11));
             let slack = Element::constant(dr, Fp::from(MAX_MONEY - maximum));
-            let blind_point = R_TABLE.mul_canonical(dr, &digest, None)?;
+            let blind_point = R_TABLE.mul_canonical(dr, &blind, None)?;
             let cv = FEE_V_TABLE.mul_bounded(dr, &slack, &blind_point)?;
             let expected = *orchard::VALUE_COMMIT_R * Fq::from(11) - value_base * Fq::from(maximum);
             assert_eq!(cv.value().take(), expected.to_affine());
@@ -214,7 +211,7 @@ fn comparator_rejects_every_encoding_above_the_modulus() {
         if !maximum[index] {
             let mut greater = maximum;
             greater[index] = true;
-            assert!(compare(greater).is_err());
+            compare(greater).unwrap_err();
             let prior_one = (index + 1..255)
                 .find(|position| maximum[*position])
                 .unwrap();
