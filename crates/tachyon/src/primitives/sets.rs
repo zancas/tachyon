@@ -68,6 +68,23 @@ impl Default for TachygramSetCommit {
     }
 }
 
+impl TryFrom<[Fp; 2]> for TachygramSetBridge {
+    type Error = ragu_core::Error;
+
+    /// Reads a bridge hash from its affine coordinates.
+    fn try_from([x, y]: [Fp; 2]) -> ragu_core::Result<Self> {
+        let point = EpAffine::from_xy(x, y).ok_or_else(|| {
+            ragu_core::Error::InvalidWitness("bridge hash is not on the curve".into())
+        })?;
+        if point.is_identity() {
+            return Err(ragu_core::Error::InvalidWitness(
+                "bridge hash is the identity".into(),
+            ));
+        }
+        Ok(Self(point))
+    }
+}
+
 impl TachygramSetBridge {
     /// The bridge hash of the empty set's constant-one commitment, computed
     /// from the baked parameters without an application, so steps can use it
