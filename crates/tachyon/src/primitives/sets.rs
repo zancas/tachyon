@@ -2,9 +2,13 @@ use core::iter;
 
 use corez::io::{self, Read, Write};
 use derive_more::{AsRef, Debug, Eq as TotalEq, From, Into, PartialEq};
-use ragu_circuits::polynomials::{ProductionRank, sparse::Polynomial};
+use ragu_circuits::{
+    polynomials::{ProductionRank, sparse::Polynomial},
+    staging::wire_degree,
+};
 use ragu_core::{Cycle as _, FixedGenerators as _, pasta::Pasta};
-use udon::curve::Projective as _;
+use ragu_primitives::{ENDOSCALAR_BITS, ENDOSCALAR_PRODUCTS};
+use udon::curve::{Affine, Projective as _};
 
 use super::{ActionDigest, Anchor, Tachygram};
 use crate::{
@@ -61,6 +65,49 @@ impl Default for TachygramSetCommit {
     /// A commitment to an empty set.
     fn default() -> Self {
         iter::empty().collect::<TachygramSetPoly>().commit()
+    }
+}
+
+impl TachygramSetBridge {
+    /// The bridge hash of the empty set's constant-one commitment, computed
+    /// from the baked parameters without an application, so steps can use it
+    /// while the application registers them.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the baked parameters lack a finite constant-one commitment
+    /// or bridge generators.
+    pub(crate) fn empty() -> ragu_core::Result<Self> {
+        let params = pasta::baked();
+        let (x, y) = Pasta::host_generators(params)
+            .g()
+            .first()
+            .and_then(Affine::coordinates)
+            .ok_or_else(|| {
+                ragu_core::Error::Initialization("constant-one commitment is not finite".into())
+            })?;
+        // The bridge point follows the hoisted endoscalar's bits and products,
+        // starting at the next reserved gate (two stage wires per gate).
+        let first_wire = (ENDOSCALAR_BITS + ENDOSCALAR_PRODUCTS).next_multiple_of(2);
+        let generators = Pasta::nested_generators(params).g();
+        let [left, right] = [first_wire, first_wire + 1].map(|wire| {
+            generators
+                .get(wire_degree::<ProductionRank>(wire))
+                .ok_or_else(|| {
+                    ragu_core::Error::Initialization("bridge generator is missing".into())
+                })
+        });
+        let commitment = left?.to_projective() * x + right?.to_projective() * y;
+        let (bridge_x, bridge_y) = commitment.to_affine().coordinates().ok_or_else(|| {
+            ragu_core::Error::Initialization("constant-one bridge hash is not finite".into())
+        })?;
+        EpAffine::from_xy(bridge_x, bridge_y)
+            .map(Self)
+            .ok_or_else(|| {
+                ragu_core::Error::Initialization(
+                    "constant-one bridge hash is not on the curve".into(),
+                )
+            })
     }
 }
 

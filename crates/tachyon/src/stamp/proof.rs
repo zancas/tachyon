@@ -29,18 +29,15 @@ pub mod summary;
 
 use lazy_static::lazy_static;
 use ragu::{Application, ApplicationBuilder, RegistryTags};
-use ragu_circuits::{polynomials::ProductionRank, staging::wire_degree};
+use ragu_circuits::polynomials::ProductionRank;
 use ragu_core::{
-    Cycle, FixedGenerators as _,
     drivers::{Driver, DriverValue},
     gadgets::Gadget,
     maybe::Maybe as _,
     pasta::Pasta,
 };
-use ragu_primitives::{
-    ENDOSCALAR_BITS, ENDOSCALAR_PRODUCTS, Element, allocator::Allocator, io::Write,
-};
-use udon::curve::{Affine, Projective as _};
+use ragu_primitives::{Element, allocator::Allocator, io::Write};
+use udon::curve::Affine as _;
 
 use crate::{gadgets::arithmetic::EpochIndex, pasta, primitives::TachygramSetBridge, value};
 
@@ -68,37 +65,6 @@ impl<'dr, D: Driver<'dr, F = pasta::Fp>> ValueCommitment<'dr, D> {
             ],
         })
     }
-}
-
-/// Prepares the constant-one commitment's bridge hash without an application.
-fn empty_stamp_bridge_hash(
-    params: &<Pasta as Cycle>::Params,
-) -> ragu_core::Result<TachygramSetBridge> {
-    let (x, y) = Pasta::host_generators(params)
-        .g()
-        .first()
-        .and_then(Affine::coordinates)
-        .ok_or_else(|| {
-            ragu_core::Error::Initialization("constant-one commitment is not finite".into())
-        })?;
-    // The bridge point follows the hoisted endoscalar's bits and products,
-    // starting at the next reserved gate (two stage wires per gate).
-    let first_wire = (ENDOSCALAR_BITS + ENDOSCALAR_PRODUCTS).next_multiple_of(2);
-    let generators = Pasta::nested_generators(params).g();
-    let [left, right] = [first_wire, first_wire + 1].map(|wire| {
-        generators
-            .get(wire_degree::<ProductionRank>(wire))
-            .ok_or_else(|| ragu_core::Error::Initialization("bridge generator is missing".into()))
-    });
-    let commitment = left?.to_projective() * x + right?.to_projective() * y;
-    let (bridge_x, bridge_y) = commitment.to_affine().coordinates().ok_or_else(|| {
-        ragu_core::Error::Initialization("constant-one bridge hash is not finite".into())
-    })?;
-    pasta::EpAffine::from_xy(bridge_x, bridge_y)
-        .map(TachygramSetBridge::from)
-        .ok_or_else(|| {
-            ragu_core::Error::Initialization("constant-one bridge hash is not on the curve".into())
-        })
 }
 
 /// Step admission checks for the stamp's epoch and nonempty tachygram set.
@@ -186,7 +152,7 @@ lazy_static! {
     /// Fixed by the baked parameters and production rank, independently of PCD setup.
     static ref EMPTY_STAMP_BRIDGE_HASH: TachygramSetBridge = {
         #[expect(clippy::expect_used, reason = "the fixed setup has finite bridge generators")]
-        empty_stamp_bridge_hash(pasta::baked()).expect("valid constant-one bridge hash")
+        TachygramSetBridge::empty().expect("valid constant-one bridge hash")
     };
 
     /// A static ref to the mock ragu application.

@@ -8,7 +8,7 @@ use crate::primitives::TachygramSetCommit;
 
 #[test]
 fn empty_stamp_bridge_hash_matches_application() {
-    let prepared = empty_stamp_bridge_hash(pasta::baked()).unwrap();
+    let prepared = TachygramSetBridge::empty().unwrap();
     assert_eq!(*EMPTY_STAMP_BRIDGE_HASH, prepared);
 
     // Exercise synthesis without witness values before using the application.
