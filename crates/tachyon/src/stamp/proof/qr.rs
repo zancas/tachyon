@@ -1079,9 +1079,8 @@ pub struct QrBucketOutput<'dr, D: Driver<'dr>> {
     pub epoch: Element<'dr, D>,
     pub anchor_start: Element<'dr, D>,
     pub anchor_next: Element<'dr, D>,
-    pub discriminant: Element<'dr, D>,
-    pub depth: Element<'dr, D>,
-    pub bits: Element<'dr, D>,
+    #[ragu(gadget)]
+    pub profile: gadgets::qr::QrProfile<'dr, D>,
     pub contents_hash: [Element<'dr, D>; 2],
 }
 
@@ -1130,25 +1129,27 @@ impl Header<Fp> for QrBucket {
                 allocator,
                 witness.as_ref().map(|fields| Fp::from(fields.2)),
             )?,
-            discriminant: Element::alloc(
-                dr,
-                allocator,
-                witness.as_ref().map(|fields| Fp::from(fields.3)),
-            )?,
-            depth: Element::alloc(
-                dr,
-                allocator,
-                witness
-                    .as_ref()
-                    .map(|fields| Fp::from(u64::from(fields.4.depth))),
-            )?,
-            bits: Element::alloc(
-                dr,
-                allocator,
-                witness
-                    .as_ref()
-                    .map(|fields| Fp::from(u64::from(fields.4.bits))),
-            )?,
+            profile: gadgets::qr::QrProfile {
+                discriminant: Element::alloc(
+                    dr,
+                    allocator,
+                    witness.as_ref().map(|fields| Fp::from(fields.3)),
+                )?,
+                depth: Element::alloc(
+                    dr,
+                    allocator,
+                    witness
+                        .as_ref()
+                        .map(|fields| Fp::from(u64::from(fields.4.depth))),
+                )?,
+                bits: Element::alloc(
+                    dr,
+                    allocator,
+                    witness
+                        .as_ref()
+                        .map(|fields| Fp::from(u64::from(fields.4.bits))),
+                )?,
+            },
             contents_hash: [
                 Element::alloc(
                     dr,
@@ -1297,9 +1298,11 @@ impl Step<Pasta> for QrBucketSeal {
             epoch: left_encoded.as_gadget().epoch.clone(),
             anchor_start: left_encoded.as_gadget().anchor_prev.clone(),
             anchor_next: crossing,
-            discriminant: left_encoded.as_gadget().discriminant.clone(),
-            depth: left_encoded.as_gadget().depth.clone(),
-            bits: left_encoded.as_gadget().bits.clone(),
+            profile: gadgets::qr::QrProfile {
+                discriminant: left_encoded.as_gadget().discriminant.clone(),
+                depth: left_encoded.as_gadget().depth.clone(),
+                bits: left_encoded.as_gadget().bits.clone(),
+            },
             contents_hash: oracles.bridge_hash().clone(),
         };
         let zeta = oracles.zeta().clone();
@@ -1437,13 +1440,7 @@ impl Step<Pasta> for QrUnspentInit {
         value_element.clone().enforce_nonzero(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("QrUnspentInit: tested value is zero".into())
         })?;
-        let bucket = left_encoded.as_gadget();
-        let profile = gadgets::qr::QrProfile {
-            discriminant: bucket.discriminant.clone(),
-            depth: bucket.depth.clone(),
-            bits: bucket.bits.clone(),
-        };
-        profile.enforce_value(
+        left_encoded.as_gadget().profile.enforce_sides_of(
             dr,
             &value_element,
             witness.as_ref().map(|data| data.1),

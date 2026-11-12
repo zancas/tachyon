@@ -3,9 +3,10 @@
 use ragu_core::{
     Result,
     drivers::{Driver, DriverValue},
+    gadgets::Gadget,
     maybe::Maybe as _,
 };
-use ragu_primitives::{Boolean, Element, GadgetExt as _};
+use ragu_primitives::{Boolean, Element, GadgetExt as _, io::Write};
 use udon::field::Field as _;
 
 use crate::{
@@ -16,22 +17,27 @@ use crate::{
 
 /// A bucket's QR profile inside a circuit: the discriminant its progression
 /// starts at, the number of sides taken, and those sides as bits.
-pub(crate) struct QrProfile<'dr, D: Driver<'dr>> {
-    pub(crate) discriminant: Element<'dr, D>,
-    pub(crate) depth: Element<'dr, D>,
-    pub(crate) bits: Element<'dr, D>,
+#[derive(Gadget, Write)]
+#[expect(
+    missing_debug_implementations,
+    reason = "a gadget holds driver wires, like the header gadgets it sits in"
+)]
+pub struct QrProfile<'dr, D: Driver<'dr>> {
+    pub discriminant: Element<'dr, D>,
+    pub depth: Element<'dr, D>,
+    pub bits: Element<'dr, D>,
 }
 
 impl<'dr, D: Driver<'dr, F = Fp>> QrProfile<'dr, D> {
-    /// Fix `value`'s side at every discriminant of the progression, and check
-    /// this profile is the value's first `depth` sides.
+    /// Proves that `value`'s first `depth` QR sides are this profile's bits.
     ///
-    /// The relations and their soundness are on
-    /// [`QrUnspentInit`](crate::stamp::proof::qr::QrUnspentInit).
-    /// [`UnspentLift`](crate::stamp::proof::pool::UnspentLift) runs the same
-    /// checks.
+    /// At each discriminant $d_i$ of the progression from `discriminant`, the
+    /// witnessed root squares to $s$ or $c \cdot s$ for $s = v + d_i$ and the
+    /// fixed non-residue $c$, which fixes the side; a zero $s$ cannot claim the
+    /// non-residue side. The depth mask must be a prefix of `depth` ones, and
+    /// the selected sides must pack to `bits`.
     #[expect(clippy::indexing_slicing, reason = "fixed 32-position profile arrays")]
-    pub(crate) fn enforce_value(
+    pub(crate) fn enforce_sides_of(
         &self,
         dr: &mut D,
         value: &Element<'dr, D>,
@@ -77,8 +83,8 @@ impl<'dr, D: Driver<'dr, F = Fp>> QrProfile<'dr, D> {
             depth_acc = depth_acc.add(dr, &selected.element());
             let index_term = selected.element().mul(dr, &position_element)?;
             index_acc = index_acc.add(dr, &index_term);
-            let selected_term = bits_acc.add(dr, &side.element());
-            let bits_term = selected.element().mul(dr, &selected_term)?;
+            let extended_bits = bits_acc.add(dr, &side.element());
+            let bits_term = selected.element().mul(dr, &extended_bits)?;
             bits_acc = bits_acc.add(dr, &bits_term);
             shifted = shifted.add(dr, &one);
             position_element = position_element.add(dr, &one);

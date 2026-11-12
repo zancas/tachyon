@@ -64,10 +64,9 @@ impl<'dr, D: Driver<'dr>, const N: usize> Deref for Bounded<'dr, D, N> {
 /// A range-checked epoch index inside a circuit.
 pub(crate) struct EpochIndex<'dr, D: Driver<'dr>> {
     element: Element<'dr, D>,
-    /// The index's two low bits, constrained by its decomposition: its
-    /// position within a nullifier group.
-    low: Boolean<'dr, D>,
-    high: Boolean<'dr, D>,
+    /// Bits 0 and 1 of the index's constrained decomposition: its position
+    /// within its `PoseidonFp::RATE`-element nullifier group.
+    position: [Boolean<'dr, D>; 2],
 }
 
 impl<'dr, D: Driver<'dr, F = Fp>> EpochIndex<'dr, D> {
@@ -94,8 +93,7 @@ impl<'dr, D: Driver<'dr, F = Fp>> EpochIndex<'dr, D> {
         Bounded::<D, 32>::new(dr, &slack)?;
         Ok(Self {
             element: epoch.clone(),
-            low: bits[0].clone(),
-            high: bits[1].clone(),
+            position: [bits[0].clone(), bits[1].clone()],
         })
     }
 
@@ -108,10 +106,10 @@ impl<'dr, D: Driver<'dr, F = Fp>> EpochIndex<'dr, D> {
     /// The first index of this index's nullifier group: the index less its
     /// position.
     pub(crate) fn group_start(&self, dr: &mut D) -> Element<'dr, D> {
-        let twice_high = self.high.element().double(dr);
+        let twice_bit1 = self.position[1].element().double(dr);
         self.element
-            .sub(dr, &self.low.element())
-            .sub(dr, &twice_high)
+            .sub(dr, &self.position[0].element())
+            .sub(dr, &twice_bit1)
     }
 
     /// This index's entry in its nullifier group, given in order from the
@@ -122,9 +120,9 @@ impl<'dr, D: Driver<'dr, F = Fp>> EpochIndex<'dr, D> {
         group: [Element<'dr, D>; PoseidonFp::RATE],
     ) -> Result<Element<'dr, D>> {
         let [first, second, third, fourth] = group;
-        let lower = self.low.conditional_select(dr, &first, &second)?;
-        let upper = self.low.conditional_select(dr, &third, &fourth)?;
-        self.high.conditional_select(dr, &lower, &upper)
+        let lower = self.position[0].conditional_select(dr, &first, &second)?;
+        let upper = self.position[0].conditional_select(dr, &third, &fourth)?;
+        self.position[1].conditional_select(dr, &lower, &upper)
     }
 
     /// The native index. Witness generation rejects an out-of-range element,
