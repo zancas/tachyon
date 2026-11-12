@@ -255,22 +255,18 @@ impl Step<Pasta> for QrSummaryIntake {
             Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right.clone())?;
         let discriminant =
             Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.0)))?;
-        let output = D::try_just(|| {
+        let data = D::just(|| {
             let (intake_discriminant,) = witness.take();
             let (summary_epoch, summary_anchor_prev, summary_anchor_end) = left.take();
             let () = right.take();
-            Ok((
-                (
-                    summary_epoch,
-                    summary_anchor_prev,
-                    summary_anchor_end,
-                    intake_discriminant,
-                    QrProfile::ROOT,
-                ),
-                (),
-            ))
-        })?;
-        let (data, aux) = output.cast();
+            (
+                summary_epoch,
+                summary_anchor_prev,
+                summary_anchor_end,
+                intake_discriminant,
+                QrProfile::ROOT,
+            )
+        });
         let fields = QrIntakeOutput {
             epoch: left_encoded.as_gadget().epoch.clone(),
             anchor_prev: left_encoded.as_gadget().anchor_prev.clone(),
@@ -282,7 +278,7 @@ impl Step<Pasta> for QrSummaryIntake {
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             data,
-            aux,
+            D::unit(),
         ))
     }
 }
@@ -367,23 +363,18 @@ impl Step<Pasta> for QrStampIntakeSeed {
             &epoch_element,
             oracles.bridge_hash(),
         )?;
-        let output = D::try_just(|| {
+        let data = D::just(|| {
             let (anchor_prev, epoch, discriminant, _) = witness.take();
             let () = left.take();
             let () = right.take();
-            let anchor_end = Anchor::from(*anchor.value().take());
-            Ok((
-                (
-                    epoch,
-                    anchor_prev,
-                    anchor_end,
-                    discriminant,
-                    QrProfile::ROOT,
-                ),
-                (),
-            ))
-        })?;
-        let (data, aux) = output.cast();
+            (
+                epoch,
+                anchor_prev,
+                Anchor::from(*anchor.value().take()),
+                discriminant,
+                QrProfile::ROOT,
+            )
+        });
         let fields = QrIntakeOutput {
             epoch: epoch_element,
             anchor_prev: previous,
@@ -394,7 +385,7 @@ impl Step<Pasta> for QrStampIntakeSeed {
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             data,
-            aux,
+            D::unit(),
         ))
     }
 }
@@ -460,13 +451,12 @@ impl Step<Pasta> for QrEmptyIntakeSeed {
         let epoch_element =
             Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.1)))?;
         gadgets::epoch::EpochIndex::new(dr, &epoch_element)?;
-        let output = D::try_just(|| {
+        let data = D::just(|| {
             let (anchor, epoch, discriminant) = witness.take();
             let () = left.take();
             let () = right.take();
-            Ok(((epoch, anchor, anchor, discriminant, QrProfile::ROOT), ()))
-        })?;
-        let (data, aux) = output.cast();
+            (epoch, anchor, anchor, discriminant, QrProfile::ROOT)
+        });
         let fields = QrIntakeOutput {
             epoch: epoch_element,
             anchor_prev: anchor_element.clone(),
@@ -477,7 +467,7 @@ impl Step<Pasta> for QrEmptyIntakeSeed {
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             data,
-            aux,
+            D::unit(),
         ))
     }
 }
@@ -574,21 +564,17 @@ impl Step<Pasta> for QrIntakeMerge {
                 .enforce_equal(dr, &right_element)
                 .map_err(|_err| ragu_core::Error::InvalidWitness(message.into()))?;
         }
-        let output = D::try_just(|| {
+        let data = D::just(|| {
             let (left_epoch, left_anchor_prev, _, left_discriminant, left_profile) = left.take();
             let (_, _, right_anchor_end, ..) = right.take();
-            Ok((
-                (
-                    left_epoch,
-                    left_anchor_prev,
-                    right_anchor_end,
-                    left_discriminant,
-                    left_profile,
-                ),
-                (),
-            ))
-        })?;
-        let (data, aux) = output.cast();
+            (
+                left_epoch,
+                left_anchor_prev,
+                right_anchor_end,
+                left_discriminant,
+                left_profile,
+            )
+        });
         let fields = QrIntakeOutput {
             epoch: left_encoded.as_gadget().epoch.clone(),
             anchor_prev: left_encoded.as_gadget().anchor_prev.clone(),
@@ -599,7 +585,7 @@ impl Step<Pasta> for QrIntakeMerge {
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             data,
-            aux,
+            D::unit(),
         ))
     }
 }
@@ -683,25 +669,21 @@ impl Step<Pasta> for QrIntakeSplit {
             })?;
 
         let non_residue_hash = oracles.bridge_hash().each_ref().map(Element::value);
-        let output = D::try_just(|| {
+        let data = D::try_just(|| {
             let (epoch, anchor_prev, anchor_end, discriminant, profile) = left.take();
             let () = right.take();
             let [first, second] = non_residue_hash;
             let bridge_hash = TachygramSetBridge::try_from([*first.take(), *second.take()])
                 .map_err(|err| ragu_core::Error::InvalidWitness(err.into()))?;
             Ok((
-                (
-                    epoch,
-                    anchor_prev,
-                    anchor_end,
-                    discriminant,
-                    profile,
-                    bridge_hash,
-                ),
-                (),
+                epoch,
+                anchor_prev,
+                anchor_end,
+                discriminant,
+                profile,
+                bridge_hash,
             ))
         })?;
-        let (data, aux) = output.cast();
         let fields = QrIntakeSidesOutput {
             intake: left_encoded.as_gadget().clone(),
             non_residue_hash: oracles.bridge_hash().clone(),
@@ -709,7 +691,7 @@ impl Step<Pasta> for QrIntakeSplit {
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             data,
-            aux,
+            D::unit(),
         ))
     }
 }
@@ -1181,7 +1163,7 @@ impl Step<Pasta> for QrBucketSeal {
             )
         })?;
         let crossing = poseidon::circuit::anchor_next_epoch(dr, &end, &next)?;
-        let output = D::try_just(|| {
+        let data = D::try_just(|| {
             let (epoch, anchor_prev, _, discriminant, profile) = left.take();
             let [hash_x, hash_y] = oracles
                 .bridge_hash()
@@ -1190,18 +1172,14 @@ impl Step<Pasta> for QrBucketSeal {
             let contents_hash = TachygramSetBridge::try_from([hash_x, hash_y])
                 .map_err(|err| ragu_core::Error::InvalidWitness(err.into()))?;
             Ok((
-                (
-                    epoch,
-                    anchor_prev,
-                    Anchor::from(*crossing.value().take()),
-                    discriminant,
-                    profile,
-                    contents_hash,
-                ),
-                (),
+                epoch,
+                anchor_prev,
+                Anchor::from(*crossing.value().take()),
+                discriminant,
+                profile,
+                contents_hash,
             ))
         })?;
-        let (data, aux) = output.cast();
         let fields = QrBucketOutput {
             network: gadgets::qr::QrNetwork {
                 epoch: left_encoded.as_gadget().epoch.clone(),
@@ -1222,7 +1200,7 @@ impl Step<Pasta> for QrBucketSeal {
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             data,
-            aux,
+            D::unit(),
         ))
     }
 }

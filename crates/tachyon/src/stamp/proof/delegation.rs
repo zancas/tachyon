@@ -490,10 +490,10 @@ impl Step<Pasta> for NullifierFuse {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded =
             Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right.clone())?;
-        let left_cm_element = left_encoded.as_gadget().cm.clone();
-        let right_cm = right_encoded.as_gadget().cm.clone();
-        left_cm_element
-            .enforce_equal(dr, &right_cm)
+        left_encoded
+            .as_gadget()
+            .cm
+            .enforce_equal(dr, &right_encoded.as_gadget().cm)
             .map_err(|_err| {
                 ragu_core::Error::InvalidWitness("NullifierFuse: note commitments differ".into())
             })?;
@@ -513,12 +513,11 @@ impl Step<Pasta> for NullifierFuse {
             &Slot::output(0),
             "NullifierFuse: merged is not the concat of the halves",
         )?;
-        let output = D::just(|| {
+        let data = D::just(|| {
             let (left_cm, left_epoch_start, _) = left.take();
             let (_, _, right_epoch_end) = right.take();
-            ((left_cm, left_epoch_start, right_epoch_end), ())
+            (left_cm, left_epoch_start, right_epoch_end)
         });
-        let (data, aux) = output.cast();
         let fields = NoteNullifiersOutput {
             cm: left_encoded.as_gadget().cm.clone(),
             epoch_start: left_encoded.as_gadget().epoch_start.clone(),
@@ -527,7 +526,7 @@ impl Step<Pasta> for NullifierFuse {
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             data,
-            aux,
+            D::unit(),
         ))
     }
 }

@@ -562,28 +562,19 @@ impl Step<Pasta> for EvidenceTreeDescend {
                 Boolean::alloc(dr, &mut (), witness.as_ref().map(|path| path.0[level].0[0]))?;
             let inner =
                 Boolean::alloc(dr, &mut (), witness.as_ref().map(|path| path.0[level].0[1]))?;
-            let children = [
+            let allocated = array::from_fn::<_, EVIDENCE_TREE_ARITY, _>(|child| {
                 Element::alloc(
                     dr,
                     &mut (),
-                    witness.as_ref().map(|path| Fp::from(path.0[level].1[0])),
-                )?,
-                Element::alloc(
-                    dr,
-                    &mut (),
-                    witness.as_ref().map(|path| Fp::from(path.0[level].1[1])),
-                )?,
-                Element::alloc(
-                    dr,
-                    &mut (),
-                    witness.as_ref().map(|path| Fp::from(path.0[level].1[2])),
-                )?,
-                Element::alloc(
-                    dr,
-                    &mut (),
-                    witness.as_ref().map(|path| Fp::from(path.0[level].1[3])),
-                )?,
-            ];
+                    witness
+                        .as_ref()
+                        .map(|path| Fp::from(path.0[level].1[child])),
+                )
+            });
+            let children = {
+                let [first, second, third, fourth] = allocated;
+                [first?, second?, third?, fourth?]
+            };
             let hash = poseidon::circuit::evidence_tree_node(dr, &children)?;
             node.enforce_equal(dr, &hash).map_err(|_err| {
                 ragu_core::Error::InvalidWitness(

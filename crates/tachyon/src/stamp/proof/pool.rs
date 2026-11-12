@@ -317,7 +317,7 @@ impl Step<Pasta> for AnchorSpanSeed {
                 )
             })?;
         gadgets::epoch::EpochIndex::new(dr, &epoch_element)?;
-        let anchor_element = poseidon::circuit::anchor_next_stamp(
+        let anchor = poseidon::circuit::anchor_next_stamp(
             dr,
             &previous,
             &epoch_element,
@@ -327,24 +327,21 @@ impl Step<Pasta> for AnchorSpanSeed {
             dr,
             oracles,
             &Slot::output(0),
-            array::from_ref(&anchor_element),
+            array::from_ref(&anchor),
             "AnchorSpanSeed: members must contain the resulting anchor",
         )?;
-        let output = D::try_just(|| {
+        let data = D::just(|| {
             let (anchor_start, ..) = witness.take();
-            let anchor_end = Anchor::from(*anchor_element.value().take());
-
-            Ok(((anchor_start, anchor_end), ()))
-        })?;
-        let (data, aux) = output.cast();
+            (anchor_start, Anchor::from(*anchor.value().take()))
+        });
         let fields = AnchorSpanOutput {
             anchor_start: previous,
-            anchor_end: anchor_element,
+            anchor_end: anchor,
         };
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             data,
-            aux,
+            D::unit(),
         ))
     }
 }
@@ -412,11 +409,11 @@ impl Step<Pasta> for AnchorSpanFuse {
         left_end.enforce_equal(dr, &right_start).map_err(|_err| {
             ragu_core::Error::InvalidWitness("AnchorSpanFuse: spans do not share a vertex".into())
         })?;
-        let output = D::try_just(|| {
+        let data = D::just(|| {
             let (left_anchor_start, ..) = left.take();
             let (_, right_anchor_end) = right.take();
-            Ok(((left_anchor_start, right_anchor_end), ()))
-        })?;
+            (left_anchor_start, right_anchor_end)
+        });
         enforce_poly_product(
             dr,
             oracles,
@@ -425,7 +422,6 @@ impl Step<Pasta> for AnchorSpanFuse {
             &Slot::output(0),
             "AnchorSpanFuse: combined is not the union of the halves",
         )?;
-        let (data, aux) = output.cast();
         let fields = AnchorSpanOutput {
             anchor_start: left_encoded.as_gadget().anchor_start.clone(),
             anchor_end: right_encoded.as_gadget().anchor_end.clone(),
@@ -433,7 +429,7 @@ impl Step<Pasta> for AnchorSpanFuse {
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             data,
-            aux,
+            D::unit(),
         ))
     }
 }
@@ -505,19 +501,16 @@ impl Step<Pasta> for UnspentFuse {
         left_epoch.enforce_equal(dr, &right_epoch).map_err(|_err| {
             ragu_core::Error::InvalidWitness("UnspentFuse: halves do not meet at one epoch".into())
         })?;
-        let output = D::try_just(|| {
+        let data = D::just(|| {
             let (left_anchor_start, left_epoch_start, ..) = left.take();
             let (_, _, right_epoch_next, right_anchor_next) = right.take();
-            Ok((
-                (
-                    left_anchor_start,
-                    left_epoch_start,
-                    right_epoch_next,
-                    right_anchor_next,
-                ),
-                (),
-            ))
-        })?;
+            (
+                left_anchor_start,
+                left_epoch_start,
+                right_epoch_next,
+                right_anchor_next,
+            )
+        });
         enforce_poly_product(
             dr,
             oracles,
@@ -526,7 +519,6 @@ impl Step<Pasta> for UnspentFuse {
             &Slot::output(0),
             "UnspentFuse: combined is not the concatenation of the halves",
         )?;
-        let (data, aux) = output.cast();
         let fields = ArbitraryUnspentOutput {
             anchor_start: left_encoded.as_gadget().anchor_start.clone(),
             epoch_start: left_encoded.as_gadget().epoch_start.clone(),
@@ -536,7 +528,7 @@ impl Step<Pasta> for UnspentFuse {
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             data,
-            aux,
+            D::unit(),
         ))
     }
 }
@@ -625,16 +617,16 @@ impl Step<Pasta> for UnspentLift {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded =
             Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right.clone())?;
-        let epoch_element = right_encoded.as_gadget().network.epoch.clone();
+        let bucket_epoch = right_encoded.as_gadget().network.epoch.clone();
         let checked_next =
-            gadgets::epoch::EpochIndex::successor(dr, &epoch_element).map_err(|_err| {
+            gadgets::epoch::EpochIndex::successor(dr, &bucket_epoch).map_err(|_err| {
                 ragu_core::Error::InvalidWitness("UnspentLift: bucket has no next epoch".into())
             })?;
         let next_value = checked_next.value()?;
         let epoch_next = checked_next.into_element();
         let unspent_epoch = left_encoded.as_gadget().epoch_next.clone();
         unspent_epoch
-            .enforce_equal(dr, &epoch_element)
+            .enforce_equal(dr, &bucket_epoch)
             .map_err(|_err| {
                 ragu_core::Error::InvalidWitness(
                     "UnspentLift: the bucket is not the segment's next epoch".into(),
@@ -800,7 +792,7 @@ impl Step<Pasta> for UnspentBind {
         // emits `epoch_next = epoch_start + 1`, `UnspentLift` raises
         // `epoch_next` by one, and `UnspentFuse` joins halves at an equal
         // epoch.
-        let output = D::try_just(|| {
+        let data = D::just(|| {
             let (
                 unspent_anchor_start,
                 unspent_epoch_start,
@@ -808,18 +800,14 @@ impl Step<Pasta> for UnspentBind {
                 unspent_anchor_next,
             ) = left.take();
             let (nullifiers_cm, ..) = right.take();
-            Ok((
-                (
-                    nullifiers_cm,
-                    unspent_anchor_start,
-                    unspent_epoch_start,
-                    unspent_epoch_next,
-                    unspent_anchor_next,
-                ),
-                (),
-            ))
-        })?;
-        let (data, aux) = output.cast();
+            (
+                nullifiers_cm,
+                unspent_anchor_start,
+                unspent_epoch_start,
+                unspent_epoch_next,
+                unspent_anchor_next,
+            )
+        });
         let fields = NoteUnspentOutput {
             cm: right_encoded.as_gadget().cm.clone(),
             anchor_start: left_encoded.as_gadget().anchor_start.clone(),
@@ -830,7 +818,7 @@ impl Step<Pasta> for UnspentBind {
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
             data,
-            aux,
+            D::unit(),
         ))
     }
 }

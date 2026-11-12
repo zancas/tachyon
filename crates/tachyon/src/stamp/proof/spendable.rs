@@ -145,7 +145,8 @@ impl Step<Pasta> for SpendableInit {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded = Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right)?;
         let previous = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.0)))?;
-        let epoch = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.2)))?;
+        let epoch_element =
+            Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.2)))?;
         let [empty_x, empty_y] =
             super::EMPTY_STAMP_BRIDGE_HASH.map(|coordinate| Element::constant(dr, coordinate));
         let equal_x = oracles.bridge_hash()[0].is_equal(dr, &mut (), &empty_x)?;
@@ -159,16 +160,19 @@ impl Step<Pasta> for SpendableInit {
                     "SpendableInit: the stamp's tachygram set is empty".into(),
                 )
             })?;
-        gadgets::epoch::EpochIndex::new(dr, &epoch)?;
+        gadgets::epoch::EpochIndex::new(dr, &epoch_element)?;
         // The anchor immediately after the creation stamp, computed in-circuit
-        // so the proof certifies the fold of `epoch` and the stamp's bridge hash;
+        // so the proof certifies the fold of the epoch and the stamp's bridge hash;
         // consensus membership of the eventual spend anchor binds the rest
         // (see the step doc).
-        let anchor =
-            poseidon::circuit::anchor_next_stamp(dr, &previous, &epoch, oracles.bridge_hash())?;
-        let x = left_encoded.as_gadget().cm.clone();
+        let anchor = poseidon::circuit::anchor_next_stamp(
+            dr,
+            &previous,
+            &epoch_element,
+            oracles.bridge_hash(),
+        )?;
         // Inclusion: cm ∈ set ⇔ the set polynomial vanishes at cm.
-        let evaluation = oracles.query(dr, Slot::output(1), &x)?;
+        let evaluation = oracles.query(dr, Slot::output(1), &left_encoded.as_gadget().cm)?;
         evaluation.enforce_zero(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("SpendableInit: commitment not in set".into())
         })?;
@@ -181,7 +185,7 @@ impl Step<Pasta> for SpendableInit {
         });
         let fields = NoteSpendableOutput {
             cm: left_encoded.as_gadget().cm.clone(),
-            epoch_current: epoch,
+            epoch_current: epoch_element,
             anchor,
         };
         Ok((
@@ -286,9 +290,8 @@ impl Step<Pasta> for QrSpendableInit {
                 "QrSpendableInit: segment does not end in the epoch after the bucket's".into(),
             )
         })?;
-        let x = left_encoded.as_gadget().cm.clone();
         // Inclusion: cm ∈ bucket ⇔ the contents vanish at cm.
-        let evaluation = oracles.query(dr, Slot::right(0), &x)?;
+        let evaluation = oracles.query(dr, Slot::right(0), &left_encoded.as_gadget().cm)?;
         evaluation.enforce_zero(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("QrSpendableInit: commitment not in bucket".into())
         })?;

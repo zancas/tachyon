@@ -585,18 +585,13 @@ impl Step<Pasta> for ActionMerge {
             .map_err(|_err| {
                 ragu_core::Error::InvalidWitness("ActionMerge: anchors must match".into())
             })?;
-        let output = D::try_just(|| {
-            let left_anchor = left.take();
-            Ok((left_anchor, ()))
-        })?;
-        let (data, aux) = output.cast();
         let fields = ActionsOutput {
             anchor: left_anchor_element,
         };
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
-            data,
-            aux,
+            left,
+            D::unit(),
         ))
     }
 }
@@ -759,16 +754,13 @@ impl Step<Pasta> for ActionLift {
                 "ActionLift: actions anchor is neither the span's start nor a member".into(),
             )
         })?;
-        let (data, aux) = right
-            .map(|(_, span_anchor_end)| (span_anchor_end, ()))
-            .cast();
         let fields = ActionsOutput {
             anchor: right_encoded.as_gadget().anchor_end.clone(),
         };
         Ok((
             (left_encoded, right_encoded, Encoded::from_gadget(fields)),
-            data,
-            aux,
+            right.map(|(_, span_anchor_end)| span_anchor_end),
+            D::unit(),
         ))
     }
 }
