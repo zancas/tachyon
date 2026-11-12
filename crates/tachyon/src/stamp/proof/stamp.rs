@@ -359,8 +359,9 @@ impl Step<Pasta> for SpendAction {
         let right_encoded = Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right)?;
         let ak_assignment = D::try_just(|| {
             let bytes: [u8; 32] = witness.as_ref().take().1.ak.0.into();
-            EpAffine::from_bytes(bytes)
-                .ok_or_else(|| ragu_core::Error::InvalidWitness("invalid ak encoding".into()))
+            EpAffine::from_bytes(bytes).ok_or_else(|| {
+                ragu_core::Error::InvalidWitness("SpendAction: invalid ak encoding".into())
+            })
         })?;
         let ak = Point::alloc(dr, ak_assignment)?;
         let nk = Element::alloc(
@@ -488,7 +489,6 @@ impl Step<Pasta> for StampMerge {
         )?;
         let left_anchor_element = left_encoded.as_gadget().anchor.clone();
         let right_anchor_element = right_encoded.as_gadget().anchor.clone();
-        // Same-anchor constraint.
         left_anchor_element
             .enforce_equal(dr, &right_anchor_element)
             .map_err(|_err| {
@@ -580,7 +580,6 @@ impl Step<Pasta> for ActionMerge {
         )?;
         let left_anchor_element = left_encoded.as_gadget().anchor.clone();
         let right_anchor_element = right_encoded.as_gadget().anchor.clone();
-        // Same-anchor constraint.
         left_anchor_element
             .enforce_equal(dr, &right_anchor_element)
             .map_err(|_err| {
@@ -853,7 +852,8 @@ impl Step<Pasta> for FeeFuse {
             &mut (),
             witness.as_ref().map(|data| Fp::from(u64::from(data.1))),
         )?;
-        // The three 51-bit slacks f, c and s sum identically to MAX_MONEY.
+        // The three 51-bit values `fee`, `change` and `slack` sum identically
+        // to MAX_MONEY.
         // Their integer sum is below p, excluding field wraparound and proving
         // 0 <= fee <= maximum <= MAX_MONEY.
         let change = maximum.sub(dr, &fee);

@@ -138,8 +138,14 @@ impl Step<Pasta> for OutputBind {
         )?;
         let cm = poseidon::circuit::note_commitment(dr, &rcm, &pk, &amount, &psi)?;
         let pad = poseidon::circuit::pad_tachygram(dr, &rcm, &pk, &amount, &psi)?;
-        cm.clone().enforce_nonzero(dr)?;
-        pad.clone().enforce_nonzero(dr)?;
+        // Two zero tachygrams collide whatever they were meant to be, and a
+        // zero root leaves the set polynomial factor `(X - tg)` trivial.
+        cm.clone().enforce_nonzero(dr).map_err(|_err| {
+            ragu_core::Error::InvalidWitness("OutputBind: note commitment is zero".into())
+        })?;
+        pad.clone().enforce_nonzero(dr).map_err(|_err| {
+            ragu_core::Error::InvalidWitness("OutputBind: padding tachygram is zero".into())
+        })?;
         let blind_point =
             fixed_base::R_TABLE.mul_free(dr, &witness.as_ref().map(|data| Fq::from(data.1)))?;
         let cv = fixed_base::NEG_V_TABLE.mul_bounded(dr, &amount, &blind_point)?;

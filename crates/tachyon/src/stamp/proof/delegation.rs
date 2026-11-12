@@ -234,8 +234,9 @@ impl Step<Pasta> for NoteSeed {
         )?;
         let ak_assignment = D::try_just(|| {
             let bytes: [u8; 32] = witness.as_ref().take().3.ak.0.into();
-            EpAffine::from_bytes(bytes)
-                .ok_or_else(|| ragu_core::Error::InvalidWitness("invalid ak encoding".into()))
+            EpAffine::from_bytes(bytes).ok_or_else(|| {
+                ragu_core::Error::InvalidWitness("NoteSeed: invalid ak encoding".into())
+            })
         })?;
         let ak = Point::alloc(dr, ak_assignment)?;
         let [ak_x, ak_y] = gadgets::coordinates(dr, &ak)?;
@@ -364,15 +365,9 @@ impl Step<Pasta> for NullifierDerive {
             )
         })?;
         // The whole window must land inside the epoch range: an index past
-        // EPOCH_MAX maps to no block height, so it labels nothing. Unreachable
-        // through `EpochIndex`, which cannot hold such an index; a real
-        // circuit sees a raw field element and needs the check.
-        let width = Element::constant(
-            dr,
-            Fp::from(u64::try_from(NF_DERIVATION_WIDTH - 1).map_err(|_err| {
-                ragu_core::Error::InvalidWitness("constant window width exceeds u64".into())
-            })?),
-        );
+        // EPOCH_MAX maps to no block height, so it labels nothing.
+        #[expect(clippy::as_conversions, reason = "constant value")]
+        let width = Element::constant(dr, Fp::from(const { (NF_DERIVATION_WIDTH - 1) as u64 }));
         let epoch_end = epoch_start.add(dr, &width);
         let end_value = gadgets::epoch::EpochIndex::new(dr, &epoch_end)
             .map_err(|_err| {

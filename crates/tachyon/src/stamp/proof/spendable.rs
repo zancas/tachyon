@@ -161,7 +161,7 @@ impl Step<Pasta> for SpendableInit {
             })?;
         gadgets::epoch::EpochIndex::new(dr, &epoch)?;
         // The anchor immediately after the creation stamp, computed in-circuit
-        // so the proof certifies the fold of `epoch` and `creation_commit`;
+        // so the proof certifies the fold of `epoch` and the stamp's bridge hash;
         // consensus membership of the eventual spend anchor binds the rest
         // (see the step doc).
         let anchor =
@@ -278,7 +278,9 @@ impl Step<Pasta> for QrSpendableInit {
         let next_value = checked_next.value()?;
         let next = checked_next.into_element();
         let unspent_next = left_encoded.as_gadget().epoch_next.clone();
-        // Defensive: the anchor equality already rejects a wrong epoch label.
+        // The anchor equality rejects a wrong epoch label only through the
+        // crossing digest's collision resistance; this ties `epoch_next` to the
+        // bucket directly.
         next.enforce_equal(dr, &unspent_next).map_err(|_err| {
             ragu_core::Error::InvalidWitness(
                 "QrSpendableInit: segment does not end in the epoch after the bucket's".into(),

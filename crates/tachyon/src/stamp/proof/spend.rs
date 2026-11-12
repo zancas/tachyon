@@ -174,6 +174,7 @@ impl Step<Pasta> for SpendBind {
         let next_start = next.group_start(dr);
         let next_group = poseidon::circuit::nullifier_group(dr, mk, &next_start)?;
         let nf_next = next.select_in_group(dr, next_group)?;
+        // A zero nullifier would collide with the note's own cm tachygram.
         nf_current.clone().enforce_nonzero(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("SpendBind: current-epoch nullifier is zero".into())
         })?;

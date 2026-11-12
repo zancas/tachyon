@@ -122,7 +122,7 @@ lazy_static! {
         coordinates.into()
     };
 
-    /// A static ref to the mock ragu application.
+    /// A static ref to the ragu application.
     pub static ref PROOF_SYSTEM: Application<'static, Pasta, ProductionRank, HEADER_SIZE> = {
         #[expect(
             clippy::expect_used,
