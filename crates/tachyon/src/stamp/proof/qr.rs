@@ -765,10 +765,11 @@ impl Step<Pasta> for QrSideSelect {
     {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded = Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right)?;
-        let intake = &left_encoded.as_gadget().intake;
-        let exceptional_element = intake
+        let exceptional_element = left_encoded
+            .as_gadget()
+            .intake
             .discriminant
-            .add(dr, &intake.profile.depth)
+            .add(dr, &left_encoded.as_gadget().intake.profile.depth)
             .negate(dr);
         let value = oracles.query(dr, Slot::left(1), &exceptional_element)?;
         value.enforce_nonzero(dr).map_err(|_err| {
@@ -872,37 +873,35 @@ impl Step<Pasta> for QrSideDescend {
     {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded = Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right)?;
-        let sides = &left_encoded.as_gadget().intake;
-        let selection = &right_encoded.as_gadget().intake;
         for (source, selected, message) in [
             (
-                &sides.epoch,
-                &selection.epoch,
+                &left_encoded.as_gadget().intake.epoch,
+                &right_encoded.as_gadget().intake.epoch,
                 "QrSideDescend: selection epoch does not match sides",
             ),
             (
-                &sides.anchor_prev,
-                &selection.anchor_prev,
+                &left_encoded.as_gadget().intake.anchor_prev,
+                &right_encoded.as_gadget().intake.anchor_prev,
                 "QrSideDescend: selection anchor_prev does not match sides",
             ),
             (
-                &sides.anchor_end,
-                &selection.anchor_end,
+                &left_encoded.as_gadget().intake.anchor_end,
+                &right_encoded.as_gadget().intake.anchor_end,
                 "QrSideDescend: selection anchor_end does not match sides",
             ),
             (
-                &sides.discriminant,
-                &selection.discriminant,
+                &left_encoded.as_gadget().intake.discriminant,
+                &right_encoded.as_gadget().intake.discriminant,
                 "QrSideDescend: selection discriminant does not match sides",
             ),
             (
-                &sides.profile.depth,
-                &selection.profile.depth,
+                &left_encoded.as_gadget().intake.profile.depth,
+                &right_encoded.as_gadget().intake.profile.depth,
                 "QrSideDescend: selection depth does not match sides",
             ),
             (
-                &sides.profile.bits,
-                &selection.profile.bits,
+                &left_encoded.as_gadget().intake.profile.bits,
+                &right_encoded.as_gadget().intake.profile.bits,
                 "QrSideDescend: selection profile does not match sides",
             ),
         ] {
@@ -922,15 +921,19 @@ impl Step<Pasta> for QrSideDescend {
                 )
             })?;
         }
-        let depth_element = sides.profile.depth.clone();
-        let profile_bits = sides.profile.bits.clone();
+        let depth_element = left_encoded.as_gadget().intake.profile.depth.clone();
+        let profile_bits = left_encoded.as_gadget().intake.profile.bits.clone();
         gadgets::range::enforce_width::<D, 5>(dr, &depth_element).map_err(|_err| {
             ragu_core::Error::InvalidWitness(
                 "QrSideDescend: profile has no bit left for another side".into(),
             )
         })?;
         let bit = Boolean::alloc(dr, &mut (), witness.as_ref().map(|data| data.0))?;
-        let discriminant_element = sides.discriminant.add(dr, &depth_element);
+        let discriminant_element = left_encoded
+            .as_gadget()
+            .intake
+            .discriminant
+            .add(dr, &depth_element);
         let one = Element::constant(dr, Fp::ONE);
         let next_depth = depth_element.add(dr, &one);
         let next_bits = profile_bits.double(dr).add(dr, &bit.element());
@@ -982,10 +985,10 @@ impl Step<Pasta> for QrSideDescend {
             )
         });
         let fields = QrIntakeOutput {
-            epoch: sides.epoch.clone(),
-            anchor_prev: sides.anchor_prev.clone(),
-            anchor_end: sides.anchor_end.clone(),
-            discriminant: sides.discriminant.clone(),
+            epoch: left_encoded.as_gadget().intake.epoch.clone(),
+            anchor_prev: left_encoded.as_gadget().intake.anchor_prev.clone(),
+            anchor_end: left_encoded.as_gadget().intake.anchor_end.clone(),
+            discriminant: left_encoded.as_gadget().intake.discriminant.clone(),
             profile: gadgets::qr::QrProfile {
                 depth: next_depth,
                 bits: next_bits,
