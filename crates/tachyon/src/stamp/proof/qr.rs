@@ -814,6 +814,11 @@ impl Step<Pasta> for QrSideSelect {
 #[derive(Debug)]
 pub struct QrSideDescend;
 
+const _: () = assert!(
+    QrProfile::MAX_DEPTH == 1 << 5,
+    "QrSideDescend's 5-bit depth check must leave a position for another side"
+);
+
 impl Step<Pasta> for QrSideDescend {
     type Aux<'source> = ();
     type Left = QrIntakeSides;

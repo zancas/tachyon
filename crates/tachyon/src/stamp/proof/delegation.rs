@@ -292,6 +292,11 @@ impl Step<Pasta> for NoteSeed {
 #[derive(Debug)]
 pub struct NullifierDerive;
 
+const _: () = assert!(
+    PoseidonFp::RATE == 1 << (u32::BITS - 30),
+    "NullifierDerive scales by a quarter and range-checks a 30-bit group index"
+);
+
 impl Step<Pasta> for NullifierDerive {
     type Aux<'source> = ();
     type Left = NoteSecret;
