@@ -25,6 +25,7 @@ use ragu_primitives::{Element, allocator::Allocator, io::Write};
 
 use crate::{
     digest::poseidon,
+    gadgets::arithmetic as circuit,
     pasta::Fp,
     primitives::{Anchor, EpochIndex, TachygramSetPoly},
     relations::enforce::{enforce_poly_equal, enforce_poly_product},
@@ -133,7 +134,10 @@ impl Step<Pasta> for SummarySeed {
         let previous = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.0)))?;
         let epoch_element =
             Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.1)))?;
-        super::enforce_stamp_domain(dr, &epoch_element, oracles.bridge_hash())?;
+        super::EMPTY_STAMP_BRIDGE_HASH
+            .enforce_distinct(dr, oracles.bridge_hash())
+            .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
+        circuit::EpochIndex::new(dr, &epoch_element)?;
         let anchor = poseidon::circuit::anchor_next_stamp(
             dr,
             &previous,
@@ -215,7 +219,10 @@ impl Step<Pasta> for SummaryAdvance {
             &Slot::output(0),
             "SummaryAdvance: extended accumulator must fold the stamp",
         )?;
-        super::enforce_stamp_domain(dr, &left_encoded.as_gadget().epoch, oracles.bridge_hash())?;
+        super::EMPTY_STAMP_BRIDGE_HASH
+            .enforce_distinct(dr, oracles.bridge_hash())
+            .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
+        circuit::EpochIndex::new(dr, &left_encoded.as_gadget().epoch)?;
         let anchor = poseidon::circuit::anchor_next_stamp(
             dr,
             &left_encoded.as_gadget().anchor_end,

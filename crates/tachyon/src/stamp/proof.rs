@@ -39,7 +39,7 @@ use ragu_core::{
 use ragu_primitives::{Element, allocator::Allocator, io::Write};
 use udon::curve::Affine as _;
 
-use crate::{gadgets::arithmetic::EpochIndex, pasta, primitives::TachygramSetBridge, value};
+use crate::{pasta, primitives::TachygramSetBridge, value};
 
 /// The affine coordinates of a value commitment `cv` on a header.
 #[derive(Gadget, Write)]
@@ -65,32 +65,6 @@ impl<'dr, D: Driver<'dr, F = pasta::Fp>> ValueCommitment<'dr, D> {
             ],
         })
     }
-}
-
-/// Step admission checks for the stamp's epoch and nonempty tachygram set.
-fn enforce_stamp_domain<'dr, D: Driver<'dr, F = pasta::Fp>>(
-    dr: &mut D,
-    epoch: &Element<'dr, D>,
-    bridge_hash: &[Element<'dr, D>; 2],
-) -> ragu_core::Result<()> {
-    #[expect(
-        clippy::expect_used,
-        reason = "empty_stamp_bridge_hash builds the point from finite coordinates"
-    )]
-    let (low, high) = pasta::EpAffine::from(*EMPTY_STAMP_BRIDGE_HASH)
-        .coordinates()
-        .expect("constant-one bridge hash is finite");
-    let low_element = Element::constant(dr, low);
-    let high_element = Element::constant(dr, high);
-    let equal_low = bridge_hash[0].is_equal(dr, &mut (), &low_element)?;
-    let equal_high = bridge_hash[1].is_equal(dr, &mut (), &high_element)?;
-    equal_low
-        .and(dr, &equal_high)?
-        .element()
-        .enforce_zero(dr)
-        .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
-    EpochIndex::new(dr, epoch)?;
-    Ok(())
 }
 
 /// Eight payload elements for QR split/selection and bucket headers and one

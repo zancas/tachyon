@@ -147,7 +147,10 @@ impl Step<Pasta> for SpendableInit {
         let right_encoded = Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right)?;
         let previous = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.0)))?;
         let epoch = Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.2)))?;
-        super::enforce_stamp_domain(dr, &epoch, oracles.bridge_hash())?;
+        super::EMPTY_STAMP_BRIDGE_HASH
+            .enforce_distinct(dr, oracles.bridge_hash())
+            .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
+        circuit::EpochIndex::new(dr, &epoch)?;
         // The anchor immediately after the creation stamp, computed in-circuit
         // so the proof certifies the fold of `epoch` and `creation_commit`;
         // consensus membership of the eventual spend anchor binds the rest

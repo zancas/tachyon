@@ -394,7 +394,10 @@ impl Step<Pasta> for QrStampIntakeSeed {
         let epoch_element =
             Element::alloc(dr, &mut (), witness.as_ref().map(|data| Fp::from(data.1)))?;
         enforce_poly_equal(dr, oracles, Slot::output(0), Slot::output(1))?;
-        super::enforce_stamp_domain(dr, &epoch_element, oracles.bridge_hash())?;
+        super::EMPTY_STAMP_BRIDGE_HASH
+            .enforce_distinct(dr, oracles.bridge_hash())
+            .map_err(|_err| ragu_core::Error::InvalidWitness("invalid anchor step".into()))?;
+        circuit::EpochIndex::new(dr, &epoch_element)?;
         let anchor = poseidon::circuit::anchor_next_stamp(
             dr,
             &previous,
