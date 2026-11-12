@@ -43,10 +43,7 @@ use ragu_primitives::{
 };
 use udon::field::Field as _;
 
-use super::{
-    delegation::NoteNullifiers,
-    qr::{QrBucket, enforce_value_profile},
-};
+use super::{delegation::NoteNullifiers, qr::QrBucket};
 use crate::{
     digest::poseidon,
     gadgets::arithmetic as circuit,
@@ -654,13 +651,9 @@ impl Step<Pasta> for UnspentLift {
         value_element.clone().enforce_nonzero(dr).map_err(|_err| {
             ragu_core::Error::InvalidWitness("UnspentLift: tested value is zero".into())
         })?;
-        let discriminant_element = right_encoded.as_gadget().discriminant.clone();
-        enforce_value_profile(
+        right_encoded.as_gadget().enforce_value_profile(
             dr,
             &value_element,
-            &discriminant_element,
-            &right_encoded.as_gadget().depth,
-            &right_encoded.as_gadget().bits,
             witness.as_ref().map(|data| data.1),
             witness.as_ref().map(|data| data.2),
         )?;
