@@ -626,11 +626,10 @@ impl Step<Pasta> for UnspentLift {
         let right_encoded =
             Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right.clone())?;
         let epoch_element = right_encoded.as_gadget().epoch.clone();
-        let one = Element::constant(dr, Fp::ONE);
-        let successor = epoch_element.add(dr, &one);
-        let checked_next = gadgets::epoch::EpochIndex::new(dr, &successor).map_err(|_err| {
-            ragu_core::Error::InvalidWitness("UnspentLift: bucket has no next epoch".into())
-        })?;
+        let checked_next =
+            gadgets::epoch::EpochIndex::successor(dr, &epoch_element).map_err(|_err| {
+                ragu_core::Error::InvalidWitness("UnspentLift: bucket has no next epoch".into())
+            })?;
         let next_value = checked_next.value()?;
         let epoch_next = checked_next.into_element();
         let unspent_epoch = left_encoded.as_gadget().epoch_next.clone();

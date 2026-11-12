@@ -52,9 +52,14 @@ impl<'dr, D: Driver<'dr, F = Fp>> EpochIndex<'dr, D> {
     }
 
     pub(crate) fn next(&self, dr: &mut D) -> Result<Self> {
+        Self::successor(dr, &self.element)
+    }
+
+    /// The range-checked index after `epoch`, which this does not check.
+    pub(crate) fn successor(dr: &mut D, epoch: &Element<'dr, D>) -> Result<Self> {
         let one = Element::constant(dr, Fp::ONE);
-        let next = self.element.add(dr, &one);
-        Self::new(dr, &next)
+        let successor = epoch.add(dr, &one);
+        Self::new(dr, &successor)
     }
 
     /// The first index of this index's nullifier group: the index less its

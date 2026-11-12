@@ -271,11 +271,10 @@ impl Step<Pasta> for QrSpendableInit {
                 "QrSpendableInit: segment does not close where the bucket does".into(),
             )
         })?;
-        let one = Element::constant(dr, Fp::ONE);
-        let successor = bucket_epoch.add(dr, &one);
-        let checked_next = gadgets::epoch::EpochIndex::new(dr, &successor).map_err(|_err| {
-            ragu_core::Error::InvalidWitness("QrSpendableInit: bucket has no next epoch".into())
-        })?;
+        let checked_next =
+            gadgets::epoch::EpochIndex::successor(dr, &bucket_epoch).map_err(|_err| {
+                ragu_core::Error::InvalidWitness("QrSpendableInit: bucket has no next epoch".into())
+            })?;
         let next_value = checked_next.value()?;
         let next = checked_next.into_element();
         let unspent_next = left_encoded.as_gadget().epoch_next.clone();

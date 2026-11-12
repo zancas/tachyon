@@ -1170,9 +1170,7 @@ impl Step<Pasta> for QrBucketSeal {
         let left_encoded = Encoded::<D, Self::Left, HEADER_SIZE>::new(dr, &mut (), left.clone())?;
         let right_encoded = Encoded::<D, Self::Right, HEADER_SIZE>::new(dr, &mut (), right)?;
         let epoch_element = left_encoded.as_gadget().epoch.clone();
-        let one = Element::constant(dr, Fp::ONE);
-        let successor = epoch_element.add(dr, &one);
-        let next = gadgets::epoch::EpochIndex::new(dr, &successor)
+        let next = gadgets::epoch::EpochIndex::successor(dr, &epoch_element)
             .map_err(|_err| {
                 ragu_core::Error::InvalidWitness(
                     "QrBucketSeal: crossing past the final epoch".into(),
@@ -1361,9 +1359,11 @@ impl Step<Pasta> for QrUnspentInit {
             witness.as_ref().map(|data| data.1),
             witness.as_ref().map(|data| data.2),
         )?;
-        let one = Element::constant(dr, Fp::ONE);
-        let successor = left_encoded.as_gadget().epoch.add(dr, &one);
-        let checked_next = gadgets::epoch::EpochIndex::new(dr, &successor).map_err(|_err| {
+        let checked_next = gadgets::epoch::EpochIndex::successor(
+            dr,
+            &left_encoded.as_gadget().epoch,
+        )
+        .map_err(|_err| {
             ragu_core::Error::InvalidWitness("QrUnspentInit: bucket has no next epoch".into())
         })?;
         let next_value = checked_next.value()?;
