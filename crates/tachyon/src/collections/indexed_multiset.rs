@@ -77,7 +77,7 @@ use udon::field::Field as _;
 
 use crate::{arithmetic, pasta::Fp};
 
-const NON_RESIDUE: Fp = Fp::new(udon::fp_hex!(
+pub(crate) const NON_RESIDUE: Fp = Fp::new(udon::fp_hex!(
     "0x0000000000000000000000000000000000000000000000000000000000000002"
 ));
 

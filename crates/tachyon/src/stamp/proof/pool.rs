@@ -47,7 +47,7 @@ use crate::{
         Anchor, AnchorSetPoly, EpochIndex, NfSeqPoly, QrClassRoot, QrProfile, Tachygram,
         TachygramSetPoly,
     },
-    relations::enforce::{enforce_poly_product, enforce_poly_roots, indexed_member_factor},
+    relations::enforce::{enforce_poly_product, enforce_poly_roots},
 };
 
 /// Multi-stamp / multi-epoch nf-exclusion proof over arbitrary values.
@@ -670,8 +670,7 @@ impl Step<Pasta> for UnspentLift {
         let z = oracles.zeta().clone();
         let elapsed_at_z = oracles.query(dr, Slot::left(0), &z)?;
         let extended_at_z = oracles.query(dr, Slot::output(0), &z)?;
-        let index_element = epoch_next.clone();
-        let factor = indexed_member_factor(dr, &value_element, &index_element, &z)?;
+        let factor = gadgets::indexed_multiset::member(dr, &value_element, &epoch_next, &z)?;
         let expected_extended = elapsed_at_z.mul(dr, &factor)?;
         extended_at_z
             .enforce_equal(dr, &expected_extended)

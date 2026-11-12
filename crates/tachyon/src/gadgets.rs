@@ -1,4 +1,5 @@
-//! Range, epoch, QR-profile and curve gadgets for proof steps.
+//! Range, epoch, indexed-multiset, QR-profile and curve gadgets for proof
+//! steps.
 
 use alloc::vec::Vec;
 
@@ -9,6 +10,7 @@ use crate::pasta::{EpAffine, Fp};
 
 pub(crate) mod epoch;
 pub(crate) mod fixed_base;
+pub(crate) mod indexed_multiset;
 pub(crate) mod qr;
 pub(crate) mod range;
 

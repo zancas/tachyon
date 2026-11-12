@@ -34,7 +34,7 @@ use crate::{
     nullifier::{self, NF_DERIVATION_WIDTH},
     pasta::{EpAffine, Fp},
     primitives::{EpochIndex, NfSeqPoly},
-    relations::enforce::{enforce_poly_product, indexed_member_factor},
+    relations::enforce::enforce_poly_product,
     value,
 };
 
@@ -395,7 +395,7 @@ impl Step<Pasta> for NullifierDerive {
             let group_start = epoch_start.add(dr, &group_offset);
             for nullifier in poseidon::circuit::nullifier_group(dr, &mk, &group_start)? {
                 let index = epoch_start.add(dr, &offset);
-                let factor = indexed_member_factor(dr, &nullifier, &index, &z)?;
+                let factor = gadgets::indexed_multiset::member(dr, &nullifier, &index, &z)?;
                 window_at_z = window_at_z.mul(dr, &factor)?;
                 offset = offset.add(dr, &one);
             }

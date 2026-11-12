@@ -51,7 +51,7 @@ use crate::{
         Anchor, EpochIndex, NfSeqPoly, QrClassRoot, QrDiscriminant, QrInterpolantPoly, QrProfile,
         QrQuotientPoly, Tachygram, TachygramSetBridge, TachygramSetPoly,
     },
-    relations::enforce::{enforce_poly_equal, enforce_poly_product, indexed_member_factor},
+    relations::enforce::{enforce_poly_equal, enforce_poly_product},
 };
 
 /// Tachygrams under routing, complete for `profile` over the covered span.
@@ -1375,8 +1375,8 @@ impl Step<Pasta> for QrUnspentInit {
         value_element.enforce_equal(dr, &oracles.staged()[0])?;
         let z = oracles.zeta().clone();
         let sequence_at_z = oracles.query(dr, Slot::output(0), &z)?;
-        let index_element = epoch_next.clone();
-        let expected_sequence = indexed_member_factor(dr, &value_element, &index_element, &z)?;
+        let expected_sequence =
+            gadgets::indexed_multiset::member(dr, &value_element, &epoch_next, &z)?;
         sequence_at_z
             .enforce_equal(dr, &expected_sequence)
             .map_err(|_err| {
